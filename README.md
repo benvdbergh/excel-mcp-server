@@ -137,6 +137,18 @@ uvx excel-mcp-server stdio
 EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-mcp-server stdio
 ```
 
+### Routing observability
+
+Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel_mcp.routing.routed_dispatch``) emit **one JSON object per dispatch** on logger ``excel-mcp.routing`` at INFO (no stdout). Fields follow ADR 0001 vocabulary:
+
+- **workbook_transport** — requested mode: ``auto``, ``file``, or ``com``.
+- **workbook_backend** — resolved backend after the selection matrix: ``file`` or ``com``.
+- **routing_reason** — stable reason string from ``RoutingBackend`` (e.g. ``forced_file``, ``full_name_match``).
+- **duration_ms** — wall time for resolve plus executed file I/O (when applicable).
+- **workbook_path** — redacted path (basename only by default; set ``EXCEL_MCP_LOG_FULL_PATHS=1`` for full path in break-glass scenarios).
+- **operation_name** — routed contract method name (e.g. ``read_range_with_metadata``).
+- **mcp_tool_name** — optional registered MCP tool name when supplied by the caller.
+
 ## Available Tools
 
 The server provides a comprehensive set of Excel manipulation tools. See [TOOLS.md](TOOLS.md) for complete documentation of all available tools.
