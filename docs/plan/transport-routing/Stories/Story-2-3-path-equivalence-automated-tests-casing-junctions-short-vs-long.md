@@ -2,7 +2,7 @@
 kind: story
 id: STORY-2-3
 title: Path equivalence automated tests (casing, junctions, short vs long)
-status: draft
+status: done
 parent: EPIC-2
 depends_on:
   - STORY-2-1
@@ -41,6 +41,10 @@ See frontmatter `acceptance_criteria`.
 
 - Optional later iteration: file-id equality; document as out-of-band if not in v1.
 - Link failing cases to risk register in PRD (OneDrive aliasing).
+
+## Delivered
+
+- `tests/test_path_equivalence.py` — symlink equivalence where permitted; Windows-only tests (`skipUnless`) for drive-letter casing, 8.3 short vs long path (`GetShortPathNameW`), directory junction / symlink path equivalence (NFR-6).
 
 ## Dependencies (narrative)
 

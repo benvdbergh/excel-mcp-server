@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-2
 title: Path normalization and unified allowlist
-status: draft
+status: done
 depends_on:
   - EPIC-1
 traces_to:
@@ -18,6 +18,18 @@ updated: "2026-04-24"
 ---
 
 # Epic-2: Path normalization and unified allowlist
+
+## Delivery summary
+
+Epic acceptance criteria are satisfied in code and tests:
+
+| Theme | Where |
+|-------|--------|
+| `resolve_target`, FR-1 / US-4 | `src/excel_mcp/path_resolution.py`, `tests/test_resolve_target.py`, `tests/test_path_equivalence.py` |
+| Unified allowlist / jail, FR-11 | `src/excel_mcp/path_policy.py`, `get_excel_path` in `src/excel_mcp/server.py`, `tests/test_path_allowlist.py` |
+| Operator docs | `README.md` — path normalization and `EXCEL_MCP_ALLOWED_PATHS` |
+
+Stories: [2-1](../Stories/Story-2-1-implement-resolve-target-with-documented-relative-path-order.md), [2-2](../Stories/Story-2-2-unify-allowlist-and-workspace-containment-on-normalized-paths.md), [2-3](../Stories/Story-2-3-path-equivalence-automated-tests-casing-junctions-short-vs-long.md) — all **done**.
 
 ## Description
 

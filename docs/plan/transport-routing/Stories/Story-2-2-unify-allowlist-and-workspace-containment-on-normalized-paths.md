@@ -2,7 +2,7 @@
 kind: story
 id: STORY-2-2
 title: Unify allowlist and workspace containment on normalized paths
-status: draft
+status: done
 parent: EPIC-2
 depends_on:
   - STORY-2-1
@@ -43,6 +43,13 @@ See frontmatter `acceptance_criteria`.
 
 - Preserve pre-fork behavior as default where PRD does not require stricter policy; document any tightening.
 - Prepare for `workbook_open_in_excel` to filter by allowed paths before returning true.
+
+## Delivered
+
+- `src/excel_mcp/path_policy.py` — `EXCEL_MCP_ALLOWED_PATHS` (`os.pathsep`), `resolved_path_is_within`, `path_is_allowed`, `assert_path_allowed`, `allowlist_enforced`.
+- `src/excel_mcp/server.py` — `get_excel_path` uses policy helpers; stdio uses `resolve_target` when allowlist active.
+- `tests/test_path_allowlist.py` — stdio allowlist pass/fail, SSE jail ∩ allowlist, `path_is_allowed` export.
+- `README.md` — operator documentation for `EXCEL_MCP_ALLOWED_PATHS` and path normalization overview.
 
 ## Dependencies (narrative)
 

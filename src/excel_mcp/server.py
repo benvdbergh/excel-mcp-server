@@ -27,6 +27,12 @@ from excel_mcp.workbook import get_workbook_info
 from excel_mcp.data import write_data
 from excel_mcp.pivot import create_pivot_table as create_pivot_table_impl
 from excel_mcp.tables import create_excel_table as create_table_impl
+from excel_mcp.path_policy import (
+    allowlist_enforced,
+    assert_path_allowed,
+    resolved_path_is_within as _resolved_path_is_within,
+)
+from excel_mcp.path_resolution import resolve_target
 from excel_mcp.sheet import (
     copy_sheet,
     delete_sheet,
@@ -73,17 +79,6 @@ mcp = FastMCP(
 )
 
 
-def _resolved_path_is_within(base: str, candidate: str) -> bool:
-    base = os.path.realpath(base)
-    candidate = os.path.realpath(candidate)
-    if candidate == base:
-        return True
-    try:
-        return os.path.commonpath([base, candidate]) == base
-    except ValueError:
-        return False
-
-
 def get_excel_path(filename: str) -> str:
     """Get full path to Excel file.
 
@@ -99,17 +94,18 @@ def get_excel_path(filename: str) -> str:
     if EXCEL_FILES_PATH is None:
         if not os.path.isabs(filename):
             raise ValueError(f"Invalid filename: {filename}, must be an absolute path when not in SSE mode")
-        return os.path.normpath(filename)
+        if not allowlist_enforced():
+            return os.path.normpath(filename)
+        resolved = resolve_target(filename)
+        assert_path_allowed(resolved, jail_realpath=None)
+        return resolved
 
     if os.path.isabs(filename):
         raise ValueError(f"Invalid filename: {filename}, must be relative to EXCEL_FILES_PATH")
 
     base = os.path.realpath(EXCEL_FILES_PATH)
-    candidate = os.path.realpath(os.path.join(base, filename))
-
-    if not _resolved_path_is_within(base, candidate):
-        raise ValueError(f"Invalid filename: {filename}, path escapes EXCEL_FILES_PATH")
-
+    candidate = resolve_target(filename, cwd=base)
+    assert_path_allowed(candidate, jail_realpath=base)
     return candidate
 
 @mcp.tool(

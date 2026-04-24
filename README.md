@@ -102,6 +102,41 @@ You can also set the `FASTMCP_PORT` environment variable to control the port the
 
 When using the **stdio protocol**, the file path is provided with each tool call, so you do **not** need to set `EXCEL_FILES_PATH` on the server. The server will use the path sent by the client for each operation.
 
+### Path normalization (`resolve_target`)
+
+Internally, workbook targets are normalized with **`resolve_target`** in `excel_mcp.path_resolution` (single entry point for **FR-1** / future COM path comparison). It uses `os.path.realpath` for stable absolute paths; relative resolution order (`search_roots`, then `cwd`) is documented in that module.
+
+- **stdio, allowlist off:** tool paths must still be **absolute**; the server returns `os.path.normpath` only (legacy behavior for existing clients).
+- **stdio, allowlist on** and **SSE / streamable HTTP:** paths are finalized with `resolve_target` before jail and allowlist checks.
+
+Integrators can reuse **`path_is_allowed`** / **`assert_path_allowed`** from `excel_mcp.path_policy` so file and future COM backends share the same policy.
+
+### Optional path allowlist (`EXCEL_MCP_ALLOWED_PATHS`)
+
+For tighter control (aligned with **FR-11**), set **`EXCEL_MCP_ALLOWED_PATHS`** to one or more allowed **directory** roots, separated by **`os.pathsep`** (semicolon on Windows, colon on macOS/Linux—the same rule as the `PATH` environment variable). Whitespace around each entry is trimmed; `~` is expanded per entry.
+
+When unset or blank, behavior matches the pre-fork defaults: stdio accepts any absolute path (subject to existing validation), and SSE/HTTP use only the `EXCEL_FILES_PATH` jail.
+
+When set:
+
+- **stdio:** each workbook path is resolved with `resolve_target`, then must lie **inside** at least one listed root (directory containment, same idea as the remote jail).
+- **SSE / streamable HTTP:** the resolved path must be inside **`EXCEL_FILES_PATH`** *and* inside at least one allowlist root (**intersection**).
+
+If the variable is non-empty but **no** root path resolves (typos, missing drive letters, unreadable paths), the allowlist is treated as **active with zero valid roots** and paths are **rejected until the environment is corrected** (fail-closed).
+
+Examples:
+
+```powershell
+# Windows: two roots (note the semicolon)
+$env:EXCEL_MCP_ALLOWED_PATHS = "E:\Workbooks;E:\SharedTemplates"
+uvx excel-mcp-server stdio
+```
+
+```bash
+# Linux / macOS: colon-separated
+EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-mcp-server stdio
+```
+
 ## Available Tools
 
 The server provides a comprehensive set of Excel manipulation tools. See [TOOLS.md](TOOLS.md) for complete documentation of all available tools.

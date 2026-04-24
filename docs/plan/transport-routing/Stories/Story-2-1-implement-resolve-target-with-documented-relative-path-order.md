@@ -2,7 +2,7 @@
 kind: story
 id: STORY-2-1
 title: Implement resolve_target with documented relative-path order
-status: draft
+status: done
 parent: EPIC-2
 depends_on:
   - STORY-1-2
@@ -42,6 +42,12 @@ See frontmatter `acceptance_criteria`.
 
 - Document interaction with existing `get_excel_path` for stdio vs SSE/HTTP; avoid double-normalization bugs.
 - Coordinate with **ADR 0001** naming in public docs vs internal function names.
+
+## Delivered
+
+- `src/excel_mcp/path_resolution.py` — `resolve_target` and module docstring (relative order, stdio vs SSE notes).
+- `src/excel_mcp/server.py` — SSE/jail branch resolves via `resolve_target`.
+- `tests/test_resolve_target.py` — absolute `realpath`, `search_roots` preference, cwd fallback, invalid input.
 
 ## Dependencies (narrative)
 
