@@ -17,34 +17,13 @@ from excel_mcp.exceptions import (
     ChartError
 )
 
-# Import from excel_mcp package with consistent _impl suffixes
-from excel_mcp.validation import (
-    validate_formula_in_cell_operation as validate_formula_impl,
-    validate_range_in_sheet_operation as validate_range_impl
-)
-from excel_mcp.chart import create_chart_in_sheet as create_chart_impl
-from excel_mcp.workbook import get_workbook_info
-from excel_mcp.data import write_data
-from excel_mcp.pivot import create_pivot_table as create_pivot_table_impl
-from excel_mcp.tables import create_excel_table as create_table_impl
+from excel_mcp.routing import FileWorkbookService
 from excel_mcp.path_policy import (
     allowlist_enforced,
     assert_path_allowed,
     resolved_path_is_within as _resolved_path_is_within,
 )
 from excel_mcp.path_resolution import resolve_target
-from excel_mcp.sheet import (
-    copy_sheet,
-    delete_sheet,
-    rename_sheet,
-    merge_range,
-    unmerge_range,
-    get_merged_ranges,
-    insert_row,
-    insert_cols,
-    delete_rows,
-    delete_cols,
-)
 
 # Get project root directory path for log file path.
 # When using the stdio transmission method,
@@ -70,6 +49,7 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("excel-mcp")
+_FILE_WORKBOOK_SERVICE = FileWorkbookService()
 # Initialize FastMCP server
 mcp = FastMCP(
     "excel-mcp",
@@ -126,15 +106,9 @@ def apply_formula(
     """
     try:
         full_path = get_excel_path(filepath)
-        # First validate the formula
-        validation = validate_formula_impl(full_path, sheet_name, cell, formula)
-        if isinstance(validation, dict) and "error" in validation:
-            return f"Error: {validation['error']}"
-            
-        # If valid, apply the formula
-        from excel_mcp.calculations import apply_formula as apply_formula_impl
-        result = apply_formula_impl(full_path, sheet_name, cell, formula)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.apply_formula(
+            full_path, sheet_name, cell, formula
+        )
     except (ValidationError, CalculationError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -156,8 +130,9 @@ def validate_formula_syntax(
     """Validate Excel formula syntax without applying it."""
     try:
         full_path = get_excel_path(filepath)
-        result = validate_formula_impl(full_path, sheet_name, cell, formula)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.validate_formula_syntax(
+            full_path, sheet_name, cell, formula
+        )
     except (ValidationError, CalculationError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -193,30 +168,26 @@ def format_range(
     """Apply formatting to a range of cells."""
     try:
         full_path = get_excel_path(filepath)
-        from excel_mcp.formatting import format_range as format_range_func
-        
-        # Convert None values to appropriate defaults for the underlying function
-        format_range_func(
-            filepath=full_path,
-            sheet_name=sheet_name,
-            start_cell=start_cell,
-            end_cell=end_cell,  # This can be None
+        return _FILE_WORKBOOK_SERVICE.format_range(
+            full_path,
+            sheet_name,
+            start_cell,
+            end_cell,
             bold=bold,
             italic=italic,
             underline=underline,
-            font_size=font_size,  # This can be None
-            font_color=font_color,  # This can be None
-            bg_color=bg_color,  # This can be None
-            border_style=border_style,  # This can be None
-            border_color=border_color,  # This can be None
-            number_format=number_format,  # This can be None
-            alignment=alignment,  # This can be None
+            font_size=font_size,
+            font_color=font_color,
+            bg_color=bg_color,
+            border_style=border_style,
+            border_color=border_color,
+            number_format=number_format,
+            alignment=alignment,
             wrap_text=wrap_text,
             merge_cells=merge_cells,
-            protection=protection,  # This can be None
-            conditional_format=conditional_format  # This can be None
+            protection=protection,
+            conditional_format=conditional_format,
         )
-        return "Range formatted successfully"
     except (ValidationError, FormattingError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -252,20 +223,13 @@ def read_data_from_excel(
     """
     try:
         full_path = get_excel_path(filepath)
-        from excel_mcp.data import read_excel_range_with_metadata
-        result = read_excel_range_with_metadata(
-            full_path, 
-            sheet_name, 
-            start_cell, 
-            end_cell
+        return _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
+            full_path,
+            sheet_name,
+            start_cell,
+            end_cell,
+            preview_only,
         )
-        if not result or not result.get("cells"):
-            return "No data found in specified range"
-            
-        # Return as formatted JSON string
-        import json
-        return json.dumps(result, indent=2, default=str)
-        
     except Exception as e:
         logger.error(f"Error reading data: {e}")
         raise
@@ -295,8 +259,9 @@ def write_data_to_excel(
     """
     try:
         full_path = get_excel_path(filepath)
-        result = write_data(full_path, sheet_name, data, start_cell)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.write_cell_grid(
+            full_path, sheet_name, data, start_cell
+        )
     except (ValidationError, DataError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -313,9 +278,7 @@ def create_workbook(filepath: str) -> str:
     """Create new Excel workbook."""
     try:
         full_path = get_excel_path(filepath)
-        from excel_mcp.workbook import create_workbook as create_workbook_impl
-        create_workbook_impl(full_path)
-        return f"Created workbook at {full_path}"
+        return _FILE_WORKBOOK_SERVICE.create_workbook(full_path)
     except WorkbookError as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -332,9 +295,7 @@ def create_worksheet(filepath: str, sheet_name: str) -> str:
     """Create new worksheet in workbook."""
     try:
         full_path = get_excel_path(filepath)
-        from excel_mcp.workbook import create_sheet as create_worksheet_impl
-        result = create_worksheet_impl(full_path, sheet_name)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.create_worksheet(full_path, sheet_name)
     except (ValidationError, WorkbookError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -360,17 +321,16 @@ def create_chart(
     """Create chart in worksheet."""
     try:
         full_path = get_excel_path(filepath)
-        result = create_chart_impl(
-            filepath=full_path,
-            sheet_name=sheet_name,
-            data_range=data_range,
-            chart_type=chart_type,
-            target_cell=target_cell,
+        return _FILE_WORKBOOK_SERVICE.create_chart_in_sheet(
+            full_path,
+            sheet_name,
+            data_range,
+            chart_type,
+            target_cell,
             title=title,
             x_axis=x_axis,
-            y_axis=y_axis
+            y_axis=y_axis,
         )
-        return result["message"]
     except (ValidationError, ChartError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -395,16 +355,15 @@ def create_pivot_table(
     """Create pivot table in worksheet."""
     try:
         full_path = get_excel_path(filepath)
-        result = create_pivot_table_impl(
-            filepath=full_path,
-            sheet_name=sheet_name,
-            data_range=data_range,
-            rows=rows,
-            values=values,
-            columns=columns or [],
-            agg_func=agg_func
+        return _FILE_WORKBOOK_SERVICE.create_pivot_table_in_sheet(
+            full_path,
+            sheet_name,
+            data_range,
+            rows,
+            values,
+            columns=columns,
+            agg_func=agg_func,
         )
-        return result["message"]
     except (ValidationError, PivotError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -427,14 +386,13 @@ def create_table(
     """Creates a native Excel table from a specified range of data."""
     try:
         full_path = get_excel_path(filepath)
-        result = create_table_impl(
-            filepath=full_path,
-            sheet_name=sheet_name,
-            data_range=data_range,
+        return _FILE_WORKBOOK_SERVICE.create_excel_table(
+            full_path,
+            sheet_name,
+            data_range,
             table_name=table_name,
-            table_style=table_style
+            table_style=table_style,
         )
-        return result["message"]
     except DataError as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -455,8 +413,9 @@ def copy_worksheet(
     """Copy worksheet within workbook."""
     try:
         full_path = get_excel_path(filepath)
-        result = copy_sheet(full_path, source_sheet, target_sheet)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.copy_worksheet(
+            full_path, source_sheet, target_sheet
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -476,8 +435,7 @@ def delete_worksheet(
     """Delete worksheet from workbook."""
     try:
         full_path = get_excel_path(filepath)
-        result = delete_sheet(full_path, sheet_name)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.delete_worksheet(full_path, sheet_name)
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -498,8 +456,9 @@ def rename_worksheet(
     """Rename worksheet in workbook."""
     try:
         full_path = get_excel_path(filepath)
-        result = rename_sheet(full_path, old_name, new_name)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.rename_worksheet(
+            full_path, old_name, new_name
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -519,8 +478,9 @@ def get_workbook_metadata(
     """Get metadata about workbook including sheets, ranges, etc."""
     try:
         full_path = get_excel_path(filepath)
-        result = get_workbook_info(full_path, include_ranges=include_ranges)
-        return str(result)
+        return _FILE_WORKBOOK_SERVICE.workbook_metadata(
+            full_path, include_ranges=include_ranges
+        )
     except WorkbookError as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -537,8 +497,9 @@ def merge_cells(filepath: str, sheet_name: str, start_cell: str, end_cell: str) 
     """Merge a range of cells."""
     try:
         full_path = get_excel_path(filepath)
-        result = merge_range(full_path, sheet_name, start_cell, end_cell)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.merge_cells(
+            full_path, sheet_name, start_cell, end_cell
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -555,8 +516,9 @@ def unmerge_cells(filepath: str, sheet_name: str, start_cell: str, end_cell: str
     """Unmerge a range of cells."""
     try:
         full_path = get_excel_path(filepath)
-        result = unmerge_range(full_path, sheet_name, start_cell, end_cell)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.unmerge_cells(
+            full_path, sheet_name, start_cell, end_cell
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -573,7 +535,9 @@ def get_merged_cells(filepath: str, sheet_name: str) -> str:
     """Get merged cells in a worksheet."""
     try:
         full_path = get_excel_path(filepath)
-        return str(get_merged_ranges(full_path, sheet_name))
+        return _FILE_WORKBOOK_SERVICE.read_merged_cell_ranges(
+            full_path, sheet_name
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -597,16 +561,14 @@ def copy_range(
     """Copy a range of cells to another location."""
     try:
         full_path = get_excel_path(filepath)
-        from excel_mcp.sheet import copy_range_operation
-        result = copy_range_operation(
+        return _FILE_WORKBOOK_SERVICE.copy_cell_range(
             full_path,
             sheet_name,
             source_start,
             source_end,
             target_start,
-            target_sheet or sheet_name  # Use source sheet if target_sheet is None
+            target_sheet=target_sheet,
         )
-        return result["message"]
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -629,15 +591,13 @@ def delete_range(
     """Delete a range of cells and shift remaining cells."""
     try:
         full_path = get_excel_path(filepath)
-        from excel_mcp.sheet import delete_range_operation
-        result = delete_range_operation(
+        return _FILE_WORKBOOK_SERVICE.delete_cell_range(
             full_path,
             sheet_name,
             start_cell,
             end_cell,
-            shift_direction
+            shift_direction,
         )
-        return result["message"]
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -659,9 +619,9 @@ def validate_excel_range(
     """Validate if a range exists and is properly formatted."""
     try:
         full_path = get_excel_path(filepath)
-        range_str = start_cell if not end_cell else f"{start_cell}:{end_cell}"
-        result = validate_range_impl(full_path, sheet_name, range_str)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.validate_sheet_range(
+            full_path, sheet_name, start_cell, end_cell
+        )
     except ValidationError as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -693,26 +653,9 @@ def get_data_validation_info(
     """
     try:
         full_path = get_excel_path(filepath)
-        from openpyxl import load_workbook
-        from excel_mcp.cell_validation import get_all_validation_ranges
-        
-        wb = load_workbook(full_path, read_only=False)
-        if sheet_name not in wb.sheetnames:
-            return f"Error: Sheet '{sheet_name}' not found"
-            
-        ws = wb[sheet_name]
-        validations = get_all_validation_ranges(ws)
-        wb.close()
-        
-        if not validations:
-            return "No data validation rules found in this worksheet"
-            
-        import json
-        return json.dumps({
-            "sheet_name": sheet_name,
-            "validation_rules": validations
-        }, indent=2, default=str)
-        
+        return _FILE_WORKBOOK_SERVICE.read_worksheet_data_validation(
+            full_path, sheet_name
+        )
     except Exception as e:
         logger.error(f"Error getting validation info: {e}")
         raise
@@ -732,8 +675,9 @@ def insert_rows(
     """Insert one or more rows starting at the specified row."""
     try:
         full_path = get_excel_path(filepath)
-        result = insert_row(full_path, sheet_name, start_row, count)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.insert_rows(
+            full_path, sheet_name, start_row, count
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -755,8 +699,9 @@ def insert_columns(
     """Insert one or more columns starting at the specified column."""
     try:
         full_path = get_excel_path(filepath)
-        result = insert_cols(full_path, sheet_name, start_col, count)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.insert_columns(
+            full_path, sheet_name, start_col, count
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -778,8 +723,9 @@ def delete_sheet_rows(
     """Delete one or more rows starting at the specified row."""
     try:
         full_path = get_excel_path(filepath)
-        result = delete_rows(full_path, sheet_name, start_row, count)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.delete_sheet_rows(
+            full_path, sheet_name, start_row, count
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -801,8 +747,9 @@ def delete_sheet_columns(
     """Delete one or more columns starting at the specified column."""
     try:
         full_path = get_excel_path(filepath)
-        result = delete_cols(full_path, sheet_name, start_col, count)
-        return result["message"]
+        return _FILE_WORKBOOK_SERVICE.delete_sheet_columns(
+            full_path, sheet_name, start_col, count
+        )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
     except Exception as e:

@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-3
 title: FileWorkbookService façade and handler consolidation
-status: draft
+status: done
 depends_on:
   - EPIC-2
 traces_to:

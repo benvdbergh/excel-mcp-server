@@ -5,8 +5,7 @@ Cites:
 - Blueprint: ``docs/excel-mcp-fork-com-vs-file-routing.md``
 - ADR 0003 (file-backed reads; read defaults align with file backend)
 - ADR 0004 (chart/pivot v1 exception: tool-forced file backend)
-- ``docs/architecture/pre-fork-architecture.md`` (25 tools;
-  ``get_data_validation_info`` uses inline ``load_workbook`` bypass)
+- ``docs/architecture/pre-fork-architecture.md`` (25 tools)
 
 Classifications:
 - ``READ``: safe read-style tools; default routing aligns with file-backed reads.
@@ -66,10 +65,7 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
     "copy_range": ToolInventoryEntry(ToolKind.WRITE),
     "delete_range": ToolInventoryEntry(ToolKind.WRITE),
     "validate_excel_range": ToolInventoryEntry(ToolKind.READ),
-    "get_data_validation_info": ToolInventoryEntry(
-        ToolKind.READ,
-        notes="Pre-fork: inline load_workbook bypass for validation metadata read.",
-    ),
+    "get_data_validation_info": ToolInventoryEntry(ToolKind.READ),
     "insert_rows": ToolInventoryEntry(ToolKind.WRITE),
     "insert_columns": ToolInventoryEntry(ToolKind.WRITE),
     "delete_sheet_rows": ToolInventoryEntry(ToolKind.WRITE),

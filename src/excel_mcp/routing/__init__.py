@@ -6,6 +6,7 @@ from excel_mcp.routing.tool_inventory import (
     ToolKind,
     get_tool_kind,
 )
+from excel_mcp.routing.file_workbook_service import FileWorkbookService
 from excel_mcp.routing.workbook_operation_contract import (
     ROUTED_WORKBOOK_OPERATION_NAMES,
     RoutedWorkbookOperations,
@@ -15,6 +16,7 @@ from excel_mcp.routing.workbook_operation_contract import (
 )
 
 __all__ = [
+    "FileWorkbookService",
     "MCP_TOOL_INVENTORY",
     "ROUTED_WORKBOOK_OPERATION_NAMES",
     "RoutedWorkbookOperations",
