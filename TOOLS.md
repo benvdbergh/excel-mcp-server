@@ -2,6 +2,15 @@
 
 This document provides detailed information about all available tools in the Excel MCP server.
 
+## Workbook routing parameters (all tools)
+
+Optional keyword arguments (when the host exposes JSON Schema for tool inputs, they appear there too):
+
+| Parameter | Type | Default | Meaning |
+| --------- | ---- | ------- | ------- |
+| `workbook_transport` | string, optional | from `EXCEL_MCP_TRANSPORT` env (`auto` if unset) | Workbook execution mode: `auto`, `file`, or `com` (case-insensitive). **Not** the MCP wire transport (stdio/SSE/HTTP). |
+| `save_after_write` | boolean, optional | from `EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT` env (`false` if unset) | On **mutating** tools only: when `true`, the server performs an explicit `save_workbook` after the operation. **Read-only tools** accept the argument but ignore it. |
+
 ## Workbook Operations
 
 ### create_workbook

@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "excel-mcp-server",
   "version": "0.1.8",
-  "description": "A Model Context Protocol server for Excel file manipulation",
+  "description": "A Model Context Protocol server for Excel file manipulation. Workbook tools accept optional workbook_transport (auto|file|com) and save_after_write; see README for operator env (EXCEL_MCP_TRANSPORT, EXCEL_MCP_COM_STRICT, etc.).",
   "author": {
     "name": "haris",
     "url": "https://github.com/haris-musa"

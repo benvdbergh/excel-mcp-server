@@ -137,6 +137,23 @@ uvx excel-mcp-server stdio
 EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-mcp-server stdio
 ```
 
+### Workbook transport and COM policy (not MCP wire transport)
+
+These environment variables control **workbook** routing (file-backed ``openpyxl`` path vs COM automation when wired in later stories). They do **not** select the MCP client↔server **wire** transport (stdio, SSE, or streamable HTTP); that is configured by how you launch the server (see above). See ADR 0001 for the vocabulary split.
+
+| Variable | Meaning |
+| -------- | ------- |
+| ``EXCEL_MCP_TRANSPORT`` | Workbook mode: ``auto``, ``file``, or ``com`` (case-insensitive). Default ``auto`` when unset or empty. Invalid values raise at read time. Parsed by ``excel_mcp.routing.read_workbook_transport``. |
+| ``EXCEL_MCP_COM_STRICT`` | When ``1`` / ``true`` / ``yes`` (case-insensitive): strict COM policy. When ``0`` / ``false`` / ``no``, or explicitly relaxed: non-strict. **Unset or empty defaults to strict** (``True``). Parsed by ``read_com_strict``. |
+| ``EXCEL_MCP_COM_ALLOW_FILE_FALLBACK`` | When ``1`` / ``true`` / ``yes``: operators allow documented file fallback in scenarios where non-strict routing would apply (ADR 0005). Unset or empty: ``False``. Parsed by ``read_com_allow_file_fallback``. |
+| ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT`` | Default for optional tool parameter ``save_after_write`` when omitted on mutating tools. ``1`` / ``true`` / ``yes`` → default **true** (extra ``save_workbook`` after file-backed writes). **Unset or empty defaults to false** (FR-8: no extra flush until requested). Parsed by ``read_save_after_write_default``. |
+
+**Effective strictness for the router** is ``effective_com_strict()``: ``False`` if file fallback is allowed **or** ``EXCEL_MCP_COM_STRICT`` is explicitly falsy; otherwise ``True``. Allowing file fallback forces non-strict effective behavior whenever that flag is on.
+
+### Optional MCP tool parameters (workbook routing)
+
+Every workbook tool accepts optional **`workbook_transport`** (``auto`` \| ``file`` \| ``com``) and **`save_after_write`** (boolean). When omitted, transport defaults to ``EXCEL_MCP_TRANSPORT`` and the save flag defaults per ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT``. **Read-only tools** ignore ``save_after_write`` (no extra save). These names refer to **workbook** execution routing (ADR 0001), not MCP wire transport.
+
 ### Routing observability
 
 Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel_mcp.routing.routed_dispatch``) emit **one JSON object per dispatch** on logger ``excel-mcp.routing`` at INFO (no stdout). Fields follow ADR 0001 vocabulary:

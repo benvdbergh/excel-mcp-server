@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, List, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -17,7 +17,22 @@ from excel_mcp.exceptions import (
     ChartError
 )
 
-from excel_mcp.routing import FileWorkbookService
+from excel_mcp.routing import (
+    FileWorkbookService,
+    RoutingBackend,
+    StubWorkbookOpenInExcel,
+    ToolKind,
+    contract_operation_name_for_mcp_tool,
+    effective_com_strict,
+    effective_save_after_write,
+    execute_routed_workbook_operation,
+    get_tool_kind,
+    resolve_workbook_transport,
+)
+from excel_mcp.routing.routing_errors import (
+    ComExecutionNotImplementedError,
+    ComRoutingError,
+)
 from excel_mcp.path_policy import (
     allowlist_enforced,
     assert_path_allowed,
@@ -50,6 +65,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger("excel-mcp")
 _FILE_WORKBOOK_SERVICE = FileWorkbookService()
+_ROUTING_BACKEND = RoutingBackend(
+    StubWorkbookOpenInExcel(),
+    com_execution_available=False,
+)
+
+
+def _workbook_dispatch(
+    mcp_tool_name: str,
+    filepath: str,
+    workbook_transport: Optional[str],
+    save_after_write: Optional[bool],
+    do_op: Callable[[str], str],
+) -> str:
+    """Resolve path, route transport, run one contract op, optional explicit save."""
+    full_path = get_excel_path(filepath)
+    transport = resolve_workbook_transport(workbook_transport)
+    com_strict = effective_com_strict()
+    tool_kind = get_tool_kind(mcp_tool_name)
+    operation_name = contract_operation_name_for_mcp_tool(mcp_tool_name)
+    out = execute_routed_workbook_operation(
+        _ROUTING_BACKEND,
+        _FILE_WORKBOOK_SERVICE,
+        resolved_path=full_path,
+        workbook_transport=transport,
+        tool_kind=tool_kind,
+        com_strict=com_strict,
+        operation_name=operation_name,
+        operation_callable=lambda: do_op(full_path),
+        mcp_tool_name=mcp_tool_name,
+    )
+    if get_tool_kind(mcp_tool_name) != ToolKind.READ and effective_save_after_write(
+        save_after_write
+    ):
+        _FILE_WORKBOOK_SERVICE.save_workbook(full_path)
+    return out
 # Initialize FastMCP server
 mcp = FastMCP(
     "excel-mcp",
@@ -99,17 +149,26 @@ def apply_formula(
     sheet_name: str,
     cell: str,
     formula: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Apply Excel formula to cell.
     Excel formula will write to cell with verification.
     """
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.apply_formula(
-            full_path, sheet_name, cell, formula
+        return _workbook_dispatch(
+            "apply_formula",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.apply_formula(
+                fp, sheet_name, cell, formula
+            ),
         )
     except (ValidationError, CalculationError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error applying formula: {e}")
@@ -126,14 +185,23 @@ def validate_formula_syntax(
     sheet_name: str,
     cell: str,
     formula: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Validate Excel formula syntax without applying it."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.validate_formula_syntax(
-            full_path, sheet_name, cell, formula
+        return _workbook_dispatch(
+            "validate_formula_syntax",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.validate_formula_syntax(
+                fp, sheet_name, cell, formula
+            ),
         )
     except (ValidationError, CalculationError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error validating formula: {e}")
@@ -163,32 +231,41 @@ def format_range(
     wrap_text: bool = False,
     merge_cells: bool = False,
     protection: Optional[Dict[str, Any]] = None,
-    conditional_format: Optional[Dict[str, Any]] = None
+    conditional_format: Optional[Dict[str, Any]] = None,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Apply formatting to a range of cells."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.format_range(
-            full_path,
-            sheet_name,
-            start_cell,
-            end_cell,
-            bold=bold,
-            italic=italic,
-            underline=underline,
-            font_size=font_size,
-            font_color=font_color,
-            bg_color=bg_color,
-            border_style=border_style,
-            border_color=border_color,
-            number_format=number_format,
-            alignment=alignment,
-            wrap_text=wrap_text,
-            merge_cells=merge_cells,
-            protection=protection,
-            conditional_format=conditional_format,
+        return _workbook_dispatch(
+            "format_range",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.format_range(
+                fp,
+                sheet_name,
+                start_cell,
+                end_cell,
+                bold=bold,
+                italic=italic,
+                underline=underline,
+                font_size=font_size,
+                font_color=font_color,
+                bg_color=bg_color,
+                border_style=border_style,
+                border_color=border_color,
+                number_format=number_format,
+                alignment=alignment,
+                wrap_text=wrap_text,
+                merge_cells=merge_cells,
+                protection=protection,
+                conditional_format=conditional_format,
+            ),
         )
     except (ValidationError, FormattingError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error formatting range: {e}")
@@ -205,7 +282,9 @@ def read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    preview_only: bool = False
+    preview_only: bool = False,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
@@ -222,14 +301,21 @@ def read_data_from_excel(
     Each cell includes: address, value, row, column, and validation info (if any).
     """
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
-            full_path,
-            sheet_name,
-            start_cell,
-            end_cell,
-            preview_only,
+        return _workbook_dispatch(
+            "read_data_from_excel",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
+                fp,
+                sheet_name,
+                start_cell,
+                end_cell,
+                preview_only,
+            ),
         )
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error reading data: {e}")
         raise
@@ -245,6 +331,8 @@ def write_data_to_excel(
     sheet_name: str,
     data: List[List],
     start_cell: str = "A1",
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Write data to Excel worksheet.
@@ -258,11 +346,18 @@ def write_data_to_excel(
   
     """
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.write_cell_grid(
-            full_path, sheet_name, data, start_cell
+        return _workbook_dispatch(
+            "write_data_to_excel",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.write_cell_grid(
+                fp, sheet_name, data, start_cell
+            ),
         )
     except (ValidationError, DataError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error writing data: {e}")
@@ -274,12 +369,23 @@ def write_data_to_excel(
         destructiveHint=True,
     ),
 )
-def create_workbook(filepath: str) -> str:
+def create_workbook(
+    filepath: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
+) -> str:
     """Create new Excel workbook."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.create_workbook(full_path)
+        return _workbook_dispatch(
+            "create_workbook",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.create_workbook(fp),
+        )
     except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error creating workbook: {e}")
@@ -291,12 +397,24 @@ def create_workbook(filepath: str) -> str:
         destructiveHint=True,
     ),
 )
-def create_worksheet(filepath: str, sheet_name: str) -> str:
+def create_worksheet(
+    filepath: str,
+    sheet_name: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
+) -> str:
     """Create new worksheet in workbook."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.create_worksheet(full_path, sheet_name)
+        return _workbook_dispatch(
+            "create_worksheet",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.create_worksheet(fp, sheet_name),
+        )
     except (ValidationError, WorkbookError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error creating worksheet: {e}")
@@ -316,22 +434,31 @@ def create_chart(
     target_cell: str,
     title: str = "",
     x_axis: str = "",
-    y_axis: str = ""
+    y_axis: str = "",
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Create chart in worksheet."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.create_chart_in_sheet(
-            full_path,
-            sheet_name,
-            data_range,
-            chart_type,
-            target_cell,
-            title=title,
-            x_axis=x_axis,
-            y_axis=y_axis,
+        return _workbook_dispatch(
+            "create_chart",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.create_chart_in_sheet(
+                fp,
+                sheet_name,
+                data_range,
+                chart_type,
+                target_cell,
+                title=title,
+                x_axis=x_axis,
+                y_axis=y_axis,
+            ),
         )
     except (ValidationError, ChartError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error creating chart: {e}")
@@ -350,21 +477,30 @@ def create_pivot_table(
     rows: List[str],
     values: List[str],
     columns: Optional[List[str]] = None,
-    agg_func: str = "mean"
+    agg_func: str = "mean",
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Create pivot table in worksheet."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.create_pivot_table_in_sheet(
-            full_path,
-            sheet_name,
-            data_range,
-            rows,
-            values,
-            columns=columns,
-            agg_func=agg_func,
+        return _workbook_dispatch(
+            "create_pivot_table",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.create_pivot_table_in_sheet(
+                fp,
+                sheet_name,
+                data_range,
+                rows,
+                values,
+                columns=columns,
+                agg_func=agg_func,
+            ),
         )
     except (ValidationError, PivotError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error creating pivot table: {e}")
@@ -381,19 +517,28 @@ def create_table(
     sheet_name: str,
     data_range: str,
     table_name: Optional[str] = None,
-    table_style: str = "TableStyleMedium9"
+    table_style: str = "TableStyleMedium9",
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Creates a native Excel table from a specified range of data."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.create_excel_table(
-            full_path,
-            sheet_name,
-            data_range,
-            table_name=table_name,
-            table_style=table_style,
+        return _workbook_dispatch(
+            "create_table",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.create_excel_table(
+                fp,
+                sheet_name,
+                data_range,
+                table_name=table_name,
+                table_style=table_style,
+            ),
         )
     except DataError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error creating table: {e}")
@@ -408,15 +553,24 @@ def create_table(
 def copy_worksheet(
     filepath: str,
     source_sheet: str,
-    target_sheet: str
+    target_sheet: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Copy worksheet within workbook."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.copy_worksheet(
-            full_path, source_sheet, target_sheet
+        return _workbook_dispatch(
+            "copy_worksheet",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.copy_worksheet(
+                fp, source_sheet, target_sheet
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error copying worksheet: {e}")
@@ -430,13 +584,22 @@ def copy_worksheet(
 )
 def delete_worksheet(
     filepath: str,
-    sheet_name: str
+    sheet_name: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete worksheet from workbook."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.delete_worksheet(full_path, sheet_name)
+        return _workbook_dispatch(
+            "delete_worksheet",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.delete_worksheet(fp, sheet_name),
+        )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error deleting worksheet: {e}")
@@ -451,15 +614,24 @@ def delete_worksheet(
 def rename_worksheet(
     filepath: str,
     old_name: str,
-    new_name: str
+    new_name: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Rename worksheet in workbook."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.rename_worksheet(
-            full_path, old_name, new_name
+        return _workbook_dispatch(
+            "rename_worksheet",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.rename_worksheet(
+                fp, old_name, new_name
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error renaming worksheet: {e}")
@@ -473,15 +645,24 @@ def rename_worksheet(
 )
 def get_workbook_metadata(
     filepath: str,
-    include_ranges: bool = False
+    include_ranges: bool = False,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Get metadata about workbook including sheets, ranges, etc."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.workbook_metadata(
-            full_path, include_ranges=include_ranges
+        return _workbook_dispatch(
+            "get_workbook_metadata",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.workbook_metadata(
+                fp, include_ranges=include_ranges
+            ),
         )
     except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error getting workbook metadata: {e}")
@@ -493,14 +674,28 @@ def get_workbook_metadata(
         destructiveHint=True,
     ),
 )
-def merge_cells(filepath: str, sheet_name: str, start_cell: str, end_cell: str) -> str:
+def merge_cells(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str,
+    end_cell: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
+) -> str:
     """Merge a range of cells."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.merge_cells(
-            full_path, sheet_name, start_cell, end_cell
+        return _workbook_dispatch(
+            "merge_cells",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.merge_cells(
+                fp, sheet_name, start_cell, end_cell
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error merging cells: {e}")
@@ -512,14 +707,28 @@ def merge_cells(filepath: str, sheet_name: str, start_cell: str, end_cell: str) 
         destructiveHint=True,
     ),
 )
-def unmerge_cells(filepath: str, sheet_name: str, start_cell: str, end_cell: str) -> str:
+def unmerge_cells(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str,
+    end_cell: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
+) -> str:
     """Unmerge a range of cells."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.unmerge_cells(
-            full_path, sheet_name, start_cell, end_cell
+        return _workbook_dispatch(
+            "unmerge_cells",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.unmerge_cells(
+                fp, sheet_name, start_cell, end_cell
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error unmerging cells: {e}")
@@ -531,14 +740,26 @@ def unmerge_cells(filepath: str, sheet_name: str, start_cell: str, end_cell: str
         readOnlyHint=True,
     ),
 )
-def get_merged_cells(filepath: str, sheet_name: str) -> str:
+def get_merged_cells(
+    filepath: str,
+    sheet_name: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
+) -> str:
     """Get merged cells in a worksheet."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.read_merged_cell_ranges(
-            full_path, sheet_name
+        return _workbook_dispatch(
+            "get_merged_cells",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.read_merged_cell_ranges(
+                fp, sheet_name
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error getting merged cells: {e}")
@@ -556,20 +777,29 @@ def copy_range(
     source_start: str,
     source_end: str,
     target_start: str,
-    target_sheet: Optional[str] = None
+    target_sheet: Optional[str] = None,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Copy a range of cells to another location."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.copy_cell_range(
-            full_path,
-            sheet_name,
-            source_start,
-            source_end,
-            target_start,
-            target_sheet=target_sheet,
+        return _workbook_dispatch(
+            "copy_range",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.copy_cell_range(
+                fp,
+                sheet_name,
+                source_start,
+                source_end,
+                target_start,
+                target_sheet=target_sheet,
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error copying range: {e}")
@@ -586,19 +816,28 @@ def delete_range(
     sheet_name: str,
     start_cell: str,
     end_cell: str,
-    shift_direction: str = "up"
+    shift_direction: str = "up",
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete a range of cells and shift remaining cells."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.delete_cell_range(
-            full_path,
-            sheet_name,
-            start_cell,
-            end_cell,
-            shift_direction,
+        return _workbook_dispatch(
+            "delete_range",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.delete_cell_range(
+                fp,
+                sheet_name,
+                start_cell,
+                end_cell,
+                shift_direction,
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error deleting range: {e}")
@@ -614,15 +853,24 @@ def validate_excel_range(
     filepath: str,
     sheet_name: str,
     start_cell: str,
-    end_cell: Optional[str] = None
+    end_cell: Optional[str] = None,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Validate if a range exists and is properly formatted."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.validate_sheet_range(
-            full_path, sheet_name, start_cell, end_cell
+        return _workbook_dispatch(
+            "validate_excel_range",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.validate_sheet_range(
+                fp, sheet_name, start_cell, end_cell
+            ),
         )
     except ValidationError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error validating range: {e}")
@@ -636,7 +884,9 @@ def validate_excel_range(
 )
 def get_data_validation_info(
     filepath: str,
-    sheet_name: str
+    sheet_name: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Get all data validation rules in a worksheet.
@@ -652,10 +902,17 @@ def get_data_validation_info(
         JSON string containing all validation rules in the worksheet
     """
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.read_worksheet_data_validation(
-            full_path, sheet_name
+        return _workbook_dispatch(
+            "get_data_validation_info",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.read_worksheet_data_validation(
+                fp, sheet_name
+            ),
         )
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error getting validation info: {e}")
         raise
@@ -670,15 +927,24 @@ def insert_rows(
     filepath: str,
     sheet_name: str,
     start_row: int,
-    count: int = 1
+    count: int = 1,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Insert one or more rows starting at the specified row."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.insert_rows(
-            full_path, sheet_name, start_row, count
+        return _workbook_dispatch(
+            "insert_rows",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.insert_rows(
+                fp, sheet_name, start_row, count
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error inserting rows: {e}")
@@ -694,15 +960,24 @@ def insert_columns(
     filepath: str,
     sheet_name: str,
     start_col: int,
-    count: int = 1
+    count: int = 1,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Insert one or more columns starting at the specified column."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.insert_columns(
-            full_path, sheet_name, start_col, count
+        return _workbook_dispatch(
+            "insert_columns",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.insert_columns(
+                fp, sheet_name, start_col, count
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error inserting columns: {e}")
@@ -718,15 +993,24 @@ def delete_sheet_rows(
     filepath: str,
     sheet_name: str,
     start_row: int,
-    count: int = 1
+    count: int = 1,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete one or more rows starting at the specified row."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.delete_sheet_rows(
-            full_path, sheet_name, start_row, count
+        return _workbook_dispatch(
+            "delete_sheet_rows",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.delete_sheet_rows(
+                fp, sheet_name, start_row, count
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error deleting rows: {e}")
@@ -742,15 +1026,24 @@ def delete_sheet_columns(
     filepath: str,
     sheet_name: str,
     start_col: int,
-    count: int = 1
+    count: int = 1,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete one or more columns starting at the specified column."""
     try:
-        full_path = get_excel_path(filepath)
-        return _FILE_WORKBOOK_SERVICE.delete_sheet_columns(
-            full_path, sheet_name, start_col, count
+        return _workbook_dispatch(
+            "delete_sheet_columns",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.delete_sheet_columns(
+                fp, sheet_name, start_col, count
+            ),
         )
     except (ValidationError, SheetError) as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error deleting columns: {e}")
