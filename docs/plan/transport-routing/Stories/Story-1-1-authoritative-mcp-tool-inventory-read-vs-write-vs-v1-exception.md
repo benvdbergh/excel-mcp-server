@@ -18,8 +18,9 @@ invest_check:
   small: true
   testable: true
 acceptance_criteria:
-  - Markdown or structured table lists each tool from pre-fork inventory with classification read, write, or v1-exception per ADR 0004.
+  - Authoritative structured inventory (code) lists each tool from the pre-fork inventory with classification read, write, or v1-exception per ADR 0004.
   - Classifications trace to PRD tool routing section and blueprint §6.
+  - Automated acceptance tests live under a descriptive test module (see Verification); story docs reference that module by path, not by story id in the filename.
 created: "2026-04-24"
 updated: "2026-04-24"
 ---
@@ -42,6 +43,11 @@ See frontmatter `acceptance_criteria`.
 
 - Start from `docs/architecture/pre-fork-architecture.md` tool count and `server.py` registrations.
 - Align default read behavior with **ADR 0003** (file-backed reads in v1).
+
+## Verification
+
+- **Implementation:** [`src/excel_mcp/routing/tool_inventory.py`](../../../../src/excel_mcp/routing/tool_inventory.py)
+- **Acceptance tests (descriptive name):** [`tests/test_authoritative_mcp_tool_inventory.py`](../../../../tests/test_authoritative_mcp_tool_inventory.py)
 
 ## Dependencies (narrative)
 

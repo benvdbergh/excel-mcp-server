@@ -20,6 +20,7 @@ invest_check:
 acceptance_criteria:
   - Protocol or facade lists operations (e.g. read_range, write_range, apply_formula, metadata) matching agreed inventory; gaps explicitly marked follow-up.
   - Contract is reviewable in code (typed interface or module doc) and referenced by EPIC-3 facade tasks.
+  - Automated acceptance tests live under a descriptive test module (see Verification); story docs reference that module by path, not by story id in the filename.
 created: "2026-04-24"
 updated: "2026-04-24"
 ---
@@ -42,6 +43,11 @@ See frontmatter `acceptance_criteria`.
 
 - Include `tool_kind` / operation metadata hooks needed for future opt-in COM reads (**ADR 0003** consequences).
 - Prefer operation-oriented names distinct from MCP wire `transport` (**ADR 0001**).
+
+## Verification
+
+- **Implementation:** [`src/excel_mcp/routing/workbook_operation_contract.py`](../../../../src/excel_mcp/routing/workbook_operation_contract.py)
+- **Acceptance tests (descriptive name):** [`tests/test_shared_workbook_operation.py`](../../../../tests/test_shared_workbook_operation.py)
 
 ## Dependencies (narrative)
 

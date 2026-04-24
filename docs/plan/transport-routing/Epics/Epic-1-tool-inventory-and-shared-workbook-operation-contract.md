@@ -18,6 +18,17 @@ updated: "2026-04-24"
 
 # Epic-1: Tool inventory and shared workbook operation contract
 
+## Implementation and verification
+
+Tests use **descriptive file names**; stories link to those tests (not the reverse).
+
+| Deliverable | Code | Acceptance tests |
+|-------------|------|------------------|
+| Classified MCP tool inventory | [`src/excel_mcp/routing/tool_inventory.py`](../../../../src/excel_mcp/routing/tool_inventory.py) | [`tests/test_authoritative_mcp_tool_inventory.py`](../../../../tests/test_authoritative_mcp_tool_inventory.py) |
+| Shared workbook operation contract | [`src/excel_mcp/routing/workbook_operation_contract.py`](../../../../src/excel_mcp/routing/workbook_operation_contract.py) | [`tests/test_shared_workbook_operation.py`](../../../../tests/test_shared_workbook_operation.py) |
+
+Package re-exports: [`src/excel_mcp/routing/__init__.py`](../../../../src/excel_mcp/routing/__init__.py).
+
 ## Description
 
 Establish the **authoritative tool inventory** and the **narrow shared API** (`FR-4`) before extracting `FileWorkbookService` or adding COM. This epic reduces rework by fixing the method surface that `FileWorkbookService` and `ComWorkbookService` must share.
