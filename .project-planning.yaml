@@ -1,0 +1,17 @@
+# Planning manifest — Excel MCP transport routing (fork)
+# See docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md for narrative sequence.
+
+version: 1
+
+defaults:
+  epics_dir: docs/plan/transport-routing/Epics
+  stories_dir: docs/plan/transport-routing/Stories
+
+source_globs:
+  - docs/specs/**/*.md
+  - docs/architecture/**/*.md
+  - docs/excel-mcp-fork-com-vs-file-routing.md
+
+naming:
+  epic_prefix: Epic-
+  story_prefix: Story-
