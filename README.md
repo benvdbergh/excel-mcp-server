@@ -2,11 +2,10 @@
   <img src="https://raw.githubusercontent.com/haris-musa/excel-mcp-server/main/assets/logo.png" alt="Excel MCP Server Logo" width="300"/>
 </p>
 
-[![PyPI version](https://img.shields.io/pypi/v/excel-mcp-server.svg)](https://pypi.org/project/excel-mcp-server/)
-[![Total Downloads](https://static.pepy.tech/badge/excel-mcp-server)](https://pepy.tech/project/excel-mcp-server)
+[![PyPI version](https://img.shields.io/pypi/v/excel-com-mcp.svg)](https://pypi.org/project/excel-com-mcp/)
+[![Total Downloads](https://static.pepy.tech/badge/excel-com-mcp)](https://pepy.tech/project/excel-com-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![smithery badge](https://smithery.ai/badge/@haris-musa/excel-mcp-server)](https://smithery.ai/server/@haris-musa/excel-mcp-server)
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=excel-mcp-server&config=eyJjb21tYW5kIjoidXZ4IGV4Y2VsLW1jcC1zZXJ2ZXIgc3RkaW8ifQ%3D%3D)
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=excel-com-mcp&config=eyJjb21tYW5kIjoidXZ4IGV4Y2VsLWNvbS1tY3Agc3RkaW8ifQ%3D%3D)
 
 A Model Context Protocol (MCP) server that lets you manipulate Excel files without needing Microsoft Excel installed. Create, read, and modify Excel workbooks with your AI agent.
 
@@ -43,7 +42,7 @@ uv run hatch build
 uv run python -m twine check dist/*
 ```
 
-The PyPI **distribution name** is **`excel-mcp-server`** (same as `[project].name` in `pyproject.toml`). Examples below use that name for **`uvx`** and MCP JSON so they stay aligned with `manifest.json` → `server.mcp_config` (`command` / `args`).
+The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` in `pyproject.toml`). A legacy console entrypoint **`excel-mcp-server`** is also installed. Examples below use **`excel-com-mcp`** for **`uvx`** and MCP JSON so they stay aligned with `manifest.json` → `server.mcp_config` (`command` / `args`).
 
 ## Usage
 
@@ -52,7 +51,7 @@ The server supports three transport methods:
 ### 1. Stdio Transport (for local use)
 
 ```bash
-uvx excel-mcp-server stdio
+uvx excel-com-mcp stdio
 ```
 
 ```json
@@ -60,7 +59,7 @@ uvx excel-mcp-server stdio
    "mcpServers": {
       "excel": {
          "command": "uvx",
-         "args": ["excel-mcp-server", "stdio"]
+         "args": ["excel-com-mcp", "stdio"]
       }
    }
 }
@@ -79,7 +78,7 @@ uvx excel-mcp-server stdio
             "C:/Users/YOU/mcp/excel-mcp-server",
             "--extra",
             "com",
-            "excel-mcp-server",
+            "excel-com-mcp",
             "stdio"
          ]
       }
@@ -92,7 +91,7 @@ On Windows you can use `C:\\\\Users\\\\YOU\\\\...` instead of forward slashes. O
 ### 2. SSE Transport (Server-Sent Events - Deprecated)
 
 ```bash
-uvx excel-mcp-server sse
+uvx excel-com-mcp sse
 ```
 
 **SSE transport connection**:
@@ -109,7 +108,7 @@ uvx excel-mcp-server sse
 ### 3. Streamable HTTP Transport (Recommended for remote connections)
 
 ```bash
-uvx excel-mcp-server streamable-http
+uvx excel-com-mcp streamable-http
 ```
 
 **Streamable HTTP transport connection**:
@@ -136,11 +135,11 @@ You can also set the `FASTMCP_PORT` environment variable to control the port the
   ```powershell
   $env:EXCEL_FILES_PATH="E:\MyExcelFiles"
   $env:FASTMCP_PORT="8007"
-  uvx excel-mcp-server streamable-http
+  uvx excel-com-mcp streamable-http
   ```
 - Example (Linux/macOS):
   ```bash
-  EXCEL_FILES_PATH=/path/to/excel_files FASTMCP_PORT=8007 uvx excel-mcp-server streamable-http
+  EXCEL_FILES_PATH=/path/to/excel_files FASTMCP_PORT=8007 uvx excel-com-mcp streamable-http
   ```
 
 ### Stdio Transport
@@ -174,12 +173,12 @@ Examples:
 ```powershell
 # Windows: two roots (note the semicolon)
 $env:EXCEL_MCP_ALLOWED_PATHS = "E:\Workbooks;E:\SharedTemplates"
-uvx excel-mcp-server stdio
+uvx excel-com-mcp stdio
 ```
 
 ```bash
 # Linux / macOS: colon-separated
-EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-mcp-server stdio
+EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-com-mcp stdio
 ```
 
 ### Workbook transport and COM policy (not MCP wire transport)
@@ -230,7 +229,7 @@ The server **does not** request **administrator elevation** by default (COM auto
 
 **Planning / delivery status:** workbook transport epics and stories are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md). Phases **1–6** are **done** in epic/story frontmatter (including optional `[com]`, `ComThreadExecutor`, and `ComWorkbookService` skeleton). **Epic 7** is **delivered** in code: COM write-class parity per the inventory matrix, MCP **`save_workbook`** (ADR 0003), **FR-9** actionable errors (Protected View, read-only, duplicates), and **ADR 0004** v1 **tool-forced file** routing for **`create_chart`** / **`create_pivot_table`** (see logs: `routing_reason` **`v1_file_forced`**, field **`v1_file_forced`**: `true` when applicable).
 
-**Optional Windows COM (`[com]`):** to install pywin32 for COM-backed workbook routing, use `pip install excel-mcp-server[com]` (or the equivalent for your installer). pywin32 is distributed under the [PSF License Agreement](https://github.com/mhammond/pywin32/blob/main/LICENSE.txt) (same terms as CPython).
+**Optional Windows COM (`[com]`):** to install pywin32 for COM-backed workbook routing, use `pip install excel-com-mcp[com]` (or the equivalent for your installer). pywin32 is distributed under the [PSF License Agreement](https://github.com/mhammond/pywin32/blob/main/LICENSE.txt) (same terms as CPython).
 
 ### COM execution threading (Windows)
 
@@ -238,7 +237,7 @@ COM apartment rules require Excel automation from a **consistent thread**. The s
 
 ### Windows manual smoke (COM write path)
 
-- Install the optional stack: ``pip install "excel-mcp-server[com]"`` (or your package equivalent) so ``pywin32`` is available.
+- Install the optional stack: ``pip install "excel-com-mcp[com]"`` (or your package equivalent) so ``pywin32`` is available.
 - Start **Microsoft Excel** manually and open the target ``.xlsx`` using **File → Open** (a running instance with the workbook loaded is required; the server does not launch Excel).
 - Run the MCP server (e.g. stdio) on the same Windows machine with routing env vars as needed (defaults: ``EXCEL_MCP_TRANSPORT=auto`` when unset).
 - Call **``write_data_to_excel``** with an **absolute** path to that file, ``workbook_transport=com`` or ``auto``, and a small ``data`` grid; with ``auto``, the workbook must be detected as open in Excel for COM to win on **write** tools.

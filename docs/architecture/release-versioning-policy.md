@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-04-27
 
-This document defines **semantic versioning**, **tagging**, **changelog / release notes**, and **automation options** for `excel-mcp-server`. It mirrors the discipline of the reference **`workflows`** repository’s alpha release docs, adapted for **Python** and **PyPI** (`pyproject.toml` as the version source of truth).
+This document defines **semantic versioning**, **tagging**, **changelog / release notes**, and **automation options** for **`excel-com-mcp`** (this fork’s PyPI distribution). It mirrors the discipline of the reference **`workflows`** repository’s alpha release docs, adapted for **Python** and **PyPI** (`pyproject.toml` as the version source of truth).
 
 ## 1) Semantic versioning (SemVer)
 

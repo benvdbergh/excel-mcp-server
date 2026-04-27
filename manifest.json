@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
-  "name": "excel-mcp-server",
-  "version": "0.1.8",
+  "name": "excel-com-mcp",
+  "version": "0.1.9",
   "description": "A Model Context Protocol server for Excel file manipulation. Workbook tools accept optional workbook_transport (auto|file|com) and save_after_write; see README for operator env (EXCEL_MCP_TRANSPORT, EXCEL_MCP_COM_STRICT, etc.).",
   "author": {
     "name": "haris",
@@ -20,7 +20,7 @@
     "entry_point": "src/excel_mcp/__main__.py",
     "mcp_config": {
       "command": "uvx",
-      "args": ["excel-mcp-server", "stdio"]
+      "args": ["excel-com-mcp", "stdio"]
     }
   },
   "tools": [

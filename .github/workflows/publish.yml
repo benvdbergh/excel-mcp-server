@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: release
-      url: https://pypi.org/project/excel-mcp-server
+      url: https://pypi.org/project/excel-com-mcp
     permissions:
       id-token: write
       contents: read

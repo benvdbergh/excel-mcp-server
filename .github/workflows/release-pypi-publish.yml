@@ -6,7 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       release_ref:
-        description: "Git ref to publish (must match package version in pyproject.toml for that revision)"
+        description: >
+          Git ref to checkout: branch (e.g. main), tag (this repo uses vX.Y.Z, not bare 0.1.8),
+          or full commit SHA. Must exist on this repo. PyPI version strings like 0.1.8 are not refs
+          unless you created a branch/tag with that exact name.
         required: true
         type: string
       pypi_target:
@@ -40,7 +43,7 @@ jobs:
     # Align names with PyPI trusted publisher + optional TestPyPI environment mapping.
     environment:
       name: ${{ github.event.inputs.pypi_target == 'testpypi' && 'testpypi' || 'release' }}
-      url: ${{ github.event.inputs.pypi_target == 'testpypi' && 'https://test.pypi.org/project/excel-mcp-server' || 'https://pypi.org/project/excel-mcp-server' }}
+      url: ${{ github.event.inputs.pypi_target == 'testpypi' && 'https://test.pypi.org/project/excel-com-mcp' || 'https://pypi.org/project/excel-com-mcp' }}
     permissions:
       id-token: write
       contents: read

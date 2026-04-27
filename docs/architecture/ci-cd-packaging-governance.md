@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-04-27
 
-This document defines how **continuous integration**, **release packaging**, and **PyPI publishing** should operate for `excel-mcp-server`. It is aligned with the same structural ideas used in the reference **`workflows`** repository (reusable quality gates, manual release paths, least-privilege permissions, documented check names), adapted for **Python**, **Hatch**, and **PyPI** instead of npm.
+This document defines how **continuous integration**, **release packaging**, and **PyPI publishing** should operate for the **`excel-com-mcp`** distribution (fork-published package name). It is aligned with the same structural ideas used in the reference **`workflows`** repository (reusable quality gates, manual release paths, least-privilege permissions, documented check names), adapted for **Python**, **Hatch**, and **PyPI** instead of npm.
 
 ## 1) Design goals
 
@@ -42,7 +42,7 @@ These filenames are the **intended** layout once implemented under `.github/work
 
 ## 4) npm → PyPI / Hatch command mapping
 
-| `workflows` (npm) | `excel-mcp-server` (Python) |
+| `workflows` (npm) | `excel-com-mcp` (Python, this fork) |
 |-------------------|-----------------------------|
 | `npm ci` | `uv sync` / `pip install -e ".[dev]"` with lock or pinned constraints (project policy). |
 | `npm test` | `pytest` (declare dev deps in `pyproject.toml`). |
@@ -76,7 +76,7 @@ Avoid granting `packages: write`, `actions: write`, or broad `pull-requests: wri
 
 Prerequisites (operator checklist):
 
-1. Package **`excel-mcp-server`** on PyPI is configured for **trusted publishing** from this GitHub repo (and environment, if using GitHub Environments).
+1. Package **`excel-com-mcp`** on PyPI is configured for **trusted publishing** from this GitHub repo (and environment, if using GitHub Environments).
 2. The workflow’s **`environment:`** name matches the PyPI trusted publisher configuration (commonly `pypi` or `release`).
 3. Publish job retains **`permissions: id-token: write`**.
 4. Version in **`pyproject.toml`** matches the intended release and has **not** already been uploaded.

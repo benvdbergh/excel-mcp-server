@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       release_ref:
-        description: "Git ref (branch, tag, or SHA) to build"
+        description: >
+          Branch (e.g. main), tag (prefer vX.Y.Z per release policy), or commit SHA that exists on this
+          repo. A PyPI version alone (0.1.8) is not a Git ref unless you tagged/branched it that way.
         required: true
         type: string
       artifact_retention_days:

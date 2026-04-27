@@ -431,8 +431,8 @@ wheels = [
 ]
 
 [[package]]
-name = "excel-mcp-server"
-version = "0.1.8"
+name = "excel-com-mcp"
+version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
