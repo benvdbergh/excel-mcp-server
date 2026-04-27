@@ -95,11 +95,14 @@ Prerequisites (operator checklist):
 
 ## 9) Current repository state (as of last review)
 
-- **`.github/workflows/publish.yml`** publishes on **`release: published`**, builds with **Hatch**, uses **`pypa/gh-action-pypi-publish`**, and sets **`id-token: write`** (appropriate for trusted publishing).
-- **`.github/workflows/ci.yml`** runs on **push** / **pull_request** to **`main`** / **`master`** and calls **`.github/workflows/reusable-validate-and-test.yml`** (`pytest`, **`hatch build`**, **`twine check dist/*`**) with least-privilege **`contents: read`** and job timeouts.
-- **`pyproject.toml`** declares **`[project.optional-dependencies].dev`** (including **`pytest`**, **`twine`**, **`hatch`**) for reproducible local runs and CI.
+- **`.github/workflows/publish.yml`** publishes on **`release: published`**, runs **`.github/workflows/reusable-validate-and-test.yml`** first, then builds with **Hatch** and uses **`pypa/gh-action-pypi-publish`** (pinned to a commit SHA) with **`id-token: write`** only on the publish job (trusted publishing).
+- **`.github/workflows/ci.yml`** runs on **push** / **pull_request** to **`main`** / **`master`** and calls **`reusable-validate-and-test.yml`** (`pytest`, **`hatch build`**, **`twine check dist/*`**) with least-privilege **`contents: read`**, PR concurrency with **cancel-in-progress**, and job timeouts.
+- **`.github/workflows/release-packaging.yml`** is **`workflow_dispatch`** manual packaging: **`release_ref`** + optional **`artifact_retention_days`** → reusable gates → **`hatch build`** → **`upload-artifact`** on **`dist/*.whl`** and **`dist/*.tar.gz`** (`if-no-files-found: error`).
+- **`.github/workflows/release-pypi-publish.yml`** is **`workflow_dispatch`** manual publish: **`release_ref`** + **`pypi_target`** (`pypi` | `testpypi`) → reusable gates → **`hatch build`** → **`pypa/gh-action-pypi-publish`** (`id-token: write` only on the publish job). **Production** uses GitHub Environment **`release`**; **TestPyPI** uses environment **`testpypi`** (create it in the repo to match PyPI trusted publisher settings).
+- Third-party Actions in the reusable workflow, **`publish.yml`**, **`release-packaging.yml`**, and **`release-pypi-publish.yml`** are pinned to **full commit SHAs** (see YAML comments for the corresponding tag).
+- **`pyproject.toml`** declares **`[project.optional-dependencies].dev`** (including **`pytest`**, **`twine`**, **`hatch`**) so **`pip install -e ".[dev]"`** / **`uv sync --extra dev`** matches CI installs.
 
-Remaining governance items (optional follow-up): manual **release-packaging** / **release-pypi-publish** workflows per §3 if not yet present; align **publish.yml** to call the same reusable validate job before build when tightening release gates.
+**Closed gap:** dev dependencies (including **pytest**) are declared in **`pyproject.toml`**; README documents the local **`pytest` / `hatch build` / `twine check`** sequence for parity with CI.
 
 ## 10) Related documents
 

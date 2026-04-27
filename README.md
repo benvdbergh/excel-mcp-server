@@ -23,6 +23,28 @@ A Model Context Protocol (MCP) server that lets you manipulate Excel files witho
 - 🔌 **Triple transport support**: stdio, SSE (deprecated), and streamable HTTP
 - 🌐 **Remote & Local**: Works both locally and as a remote service
 
+## Development and CI parity
+
+Install **dev** extras so local runs match PR and release gates ([`docs/architecture/ci-cd-packaging-governance.md`](docs/architecture/ci-cd-packaging-governance.md)):
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+hatch build
+python -m twine check dist/*
+```
+
+From the repository root with **uv** (uses `uv.lock` if present):
+
+```bash
+uv sync --extra dev
+uv run python -m pytest
+uv run hatch build
+uv run python -m twine check dist/*
+```
+
+The PyPI **distribution name** is **`excel-mcp-server`** (same as `[project].name` in `pyproject.toml`). Examples below use that name for **`uvx`** and MCP JSON so they stay aligned with `manifest.json` → `server.mcp_config` (`command` / `args`).
+
 ## Usage
 
 The server supports three transport methods:

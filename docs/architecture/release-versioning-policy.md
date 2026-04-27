@@ -103,6 +103,17 @@ Pick one primary model; all can satisfy the same governance if checks stay centr
 
 **Recommendation:** start with **reusable CI + manual dispatch publish** (or hardened **release-published** path), then add **release-please** if release volume grows.
 
+**Active automation in this repository**
+
+| Trigger | Workflow | Role |
+|---------|----------|------|
+| **`push` / `pull_request`** to `main` / `master` | **`ci.yml`** | Calls **`reusable-validate-and-test.yml`** (PR quality gate; stable job name **`validate-and-test`**). |
+| **`release: published`** | **`publish.yml`** | Trusted publish to PyPI after the same reusable validation; GitHub Environment **`release`**. |
+| **`workflow_dispatch`** | **`release-packaging.yml`** | Build **`dist/*`** from **`release_ref`** for inspection. |
+| **`workflow_dispatch`** | **`release-pypi-publish.yml`** | Manual trusted publish from **`release_ref`** to **PyPI** or **TestPyPI** (`pypi_target`). |
+
+This table is the concrete mapping for §5’s “manual + release-published” model; adjust branch protection required checks to the displayed **`CI / validate-and-test`** (or equivalent) name in GitHub once workflows are enabled.
+
 ## 6) CI/CD governance cross-reference
 
 Workflow names, permissions, artifact retention, and PyPI OIDC details: **[ci-cd-packaging-governance.md](ci-cd-packaging-governance.md)**.
