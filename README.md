@@ -210,7 +210,7 @@ EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-com-mcp stdio
 
 When **`EXCEL_MCP_ALLOWED_PATHS`** is set (path allowlist **on**), **`https://` cloud workbook locators** must also match at least one entry in **`EXCEL_MCP_ALLOWED_URL_PREFIXES`**, or they are rejected (fail-closed). This is separate from directory containment: filesystem roots do not authorize arbitrary SharePoint URLs.
 
-- Segments are separated with **`os.pathsep`** (semicolon on Windows, colon on POSIX), same as `EXCEL_MCP_ALLOWED_PATHS`.
+- Segments are separated with **semicolons (`;`)** on every platform (not `PATH`-style `os.pathsep`: `https://` URLs contain colons, so colon-separated lists break on Linux/macOS).
 - Each segment is a **prefix URL** (scheme `https`, host, and optional path) after the same canonicalization as workbook URLs. Prefer a **trailing slash** on path prefixes (e.g. `https://contoso.sharepoint.com/sites/Team/`) so only that hierarchy is allowed.
 - If the path allowlist is on but this variable is missing, empty, or has no valid `https` entries, **https workbook targets are denied**.
 
@@ -226,7 +226,7 @@ These environment variables control **workbook** routing (file-backed ``openpyxl
 | ``EXCEL_MCP_COM_STRICT`` | When ``1`` / ``true`` / ``yes`` (case-insensitive): strict COM policy. When ``0`` / ``false`` / ``no``, or explicitly relaxed: non-strict. **Unset or empty defaults to strict** (``True``). Parsed by ``read_com_strict``. |
 | ``EXCEL_MCP_COM_ALLOW_FILE_FALLBACK`` | When ``1`` / ``true`` / ``yes``: operators allow documented file fallback in scenarios where non-strict routing would apply (ADR 0005). Unset or empty: ``False``. Parsed by ``read_com_allow_file_fallback``. |
 | ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT`` | Default for optional tool parameter ``save_after_write`` when omitted on mutating tools. ``1`` / ``true`` / ``yes`` → default **true** (extra ``save_workbook`` after file-backed writes). **Unset or empty defaults to false** (FR-8: no extra flush until requested). Parsed by ``read_save_after_write_default``. |
-| ``EXCEL_MCP_ALLOWED_URL_PREFIXES`` | When ``EXCEL_MCP_ALLOWED_PATHS`` is set: **required** for `https` workbook locators. Semicolon/colon-separated (``os.pathsep``) **https** URL prefixes. See [URL prefix allowlist](#url-prefix-allowlist-for-cloud-locators-excel_mcp_allowed_url_prefixes). |
+| ``EXCEL_MCP_ALLOWED_URL_PREFIXES`` | When ``EXCEL_MCP_ALLOWED_PATHS`` is set: **required** for `https` workbook locators. **Semicolon-separated** **https** URL prefixes on all OSes. See [URL prefix allowlist](#url-prefix-allowlist-for-cloud-locators-excel_mcp_allowed_url_prefixes). |
 
 **Effective strictness for the router** is ``effective_com_strict()``: ``False`` if file fallback is allowed **or** ``EXCEL_MCP_COM_STRICT`` is explicitly falsy; otherwise ``True``. Allowing file fallback forces non-strict effective behavior whenever that flag is on.
 

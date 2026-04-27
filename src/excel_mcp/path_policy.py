@@ -32,9 +32,11 @@ enforced). HTTPS **cloud workbook locators** (SharePoint-style URLs) must then
 match at least one allowed URL prefix after canonicalization (ADR 0006 /
 Story 9-2).
 
-Segments use **``os.pathsep``** like ``EXCEL_MCP_ALLOWED_PATHS``. Each non-empty
-segment is trimmed and normalized with the same rules as cloud workbook URLs
-(``parse_cloud_workbook_locator``). Invalid segments are skipped.
+Entries are **semicolon (``;``) separated** on **all** platforms. Do **not** use
+``os.pathsep`` (colon on POSIX) here: valid ``https://`` URLs contain colons and
+would be split incorrectly. Each non-empty segment is trimmed and normalized
+with the same rules as cloud workbook URLs (``parse_cloud_workbook_locator``).
+Invalid segments are skipped.
 
 When the path allowlist is on but this variable is unset, empty, or yields no
 valid prefixes, **https workbook locators** are rejected (fail-closed). Disk
@@ -148,7 +150,8 @@ def _url_allowlist_prefixes_canonical() -> tuple[str, ...] | None:
     raw = os.environ.get("EXCEL_MCP_ALLOWED_URL_PREFIXES")
     if raw is None or not raw.strip():
         return None
-    parts = [p.strip() for p in raw.split(os.pathsep) if p.strip()]
+    # Semicolons on all OSes: "https://..." contains ":"; os.pathsep is ":" on POSIX and would break URLs.
+    parts = [p.strip() for p in raw.split(";") if p.strip()]
     if not parts:
         return None
     out: list[str] = []
