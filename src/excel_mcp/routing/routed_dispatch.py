@@ -34,7 +34,10 @@ def redact_workbook_path_for_logs(resolved_path: str) -> str:
     flag = os.environ.get("EXCEL_MCP_LOG_FULL_PATHS", "").strip().lower()
     if flag in ("1", "true", "yes"):
         return resolved_path
-    return os.path.basename(resolved_path)
+    # `os.path.basename` on POSIX ignores `\`; workbook paths can still be
+    # Windows-shaped (tests, or resolved paths forwarded across contexts).
+    normalized = resolved_path.replace("\\", "/")
+    return os.path.basename(normalized)
 
 
 def execute_routed_workbook_operation(
