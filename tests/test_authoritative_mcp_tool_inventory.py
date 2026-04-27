@@ -45,14 +45,16 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "insert_columns",
         "delete_sheet_rows",
         "delete_sheet_columns",
+        "excel_open_workbook",
+        "excel_close_workbook",
     }
 )
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-def test_inventory_has_exactly_26_keys() -> None:
-    assert len(MCP_TOOL_INVENTORY) == 26
+def test_inventory_has_exactly_28_keys() -> None:
+    assert len(MCP_TOOL_INVENTORY) == 28
 
 
 def test_every_key_matches_expected_set_or_pattern() -> None:
@@ -80,3 +82,8 @@ def test_chart_and_pivot_are_v1_file_forced() -> None:
 
 def test_at_least_one_read_tool_is_read() -> None:
     assert get_tool_kind("read_data_from_excel") is ToolKind.READ
+
+
+def test_lifecycle_tools_are_session() -> None:
+    assert get_tool_kind("excel_open_workbook") is ToolKind.SESSION
+    assert get_tool_kind("excel_close_workbook") is ToolKind.SESSION

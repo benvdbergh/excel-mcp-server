@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import pytest
 
+import importlib
+
 from excel_mcp.routing.routing_env import (
     EXCEL_MCP_COM_ALLOW_FILE_FALLBACK,
     EXCEL_MCP_COM_STRICT,
-    EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT,
     EXCEL_MCP_TRANSPORT,
     effective_com_strict,
-    effective_save_after_write,
     read_com_allow_file_fallback,
     read_com_strict,
-    read_save_after_write_default,
     read_workbook_transport,
     resolve_workbook_transport,
 )
@@ -25,7 +24,6 @@ def clean_routing_env(monkeypatch: pytest.MonkeyPatch) -> None:
         EXCEL_MCP_TRANSPORT,
         EXCEL_MCP_COM_STRICT,
         EXCEL_MCP_COM_ALLOW_FILE_FALLBACK,
-        EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT,
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -150,15 +148,15 @@ def test_effective_com_strict_fallback_with_default_strict_still_non_strict(
     assert effective_com_strict() is False
 
 
-def test_read_save_after_write_default_false(clean_routing_env: None) -> None:
-    assert read_save_after_write_default() is False
-
-
-def test_read_save_after_write_default_truthy(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT, "1")
-    assert read_save_after_write_default() is True
+def test_save_after_write_api_removed() -> None:
+    """STORY-11-2: persistence is only via save_workbook; env flag API is gone."""
+    re = importlib.import_module("excel_mcp.routing.routing_env")
+    for name in (
+        "EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT",
+        "read_save_after_write_default",
+        "effective_save_after_write",
+    ):
+        assert not hasattr(re, name), f"expected {name} to be removed"
 
 
 def test_resolve_workbook_transport_uses_env_when_override_none(
@@ -177,12 +175,6 @@ def test_resolve_workbook_transport_override(monkeypatch: pytest.MonkeyPatch) ->
 def test_resolve_workbook_transport_invalid_override() -> None:
     with pytest.raises(ValueError, match="workbook_transport"):
         resolve_workbook_transport("stdio")
-
-
-def test_effective_save_after_write(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT, "true")
-    assert effective_save_after_write(None) is True
-    assert effective_save_after_write(False) is False
 
 
 def test_read_functions_use_explicit_environ_mapping() -> None:

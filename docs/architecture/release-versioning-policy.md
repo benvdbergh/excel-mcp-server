@@ -1,6 +1,6 @@
 # Release management and versioning policy
 
-**Last reviewed:** 2026-04-28
+**Last reviewed:** 2026-04-2
 
 **Changelog file:** repository root [`CHANGELOG.md`](../../CHANGELOG.md) records user-facing release notes per version; bump **`[project] version`** in `pyproject.toml` (and **`manifest.json`**) before any PyPI upload—**duplicate file** errors mean the version is already on the index (see [PyPI help: file reuse](https://pypi.org/help/#file-name-reuse)).
 

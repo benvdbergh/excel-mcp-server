@@ -13,7 +13,7 @@ Traceability:
   contract on the selected backend.
 
 ``operation_metadata`` (keyword-only) carries ``tool_kind`` / routing hints for
-default file-backed reads and future **opt-in COM reads** (ADR 0003). It must
+COM-first read/write routing (ADR 0008) and optional per-call opt-ins. It must
 not be confused with MCP client connection mode.
 
 This module intentionally does **not** import ``excel_mcp.server`` (avoid
@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol, TypedDict
 
 
 class WorkbookOperationMetadata(TypedDict, total=False):
-    """Routing context attached by ``RoutingBackend`` / façade (ADR 0003).
+    """Routing context attached by ``RoutingBackend`` / façade (ADR 0008).
 
     All keys optional. Prefer value strings aligned with
     ``excel_mcp.routing.tool_inventory.ToolKind`` (``read``, ``write``,
@@ -46,7 +46,7 @@ class WorkbookOperationMetadata(TypedDict, total=False):
 
 
 class WorkbookReadOperations(Protocol):
-    """Read-class workbook operations (default file-backed; ADR 0003)."""
+    """Read-class workbook operations (routed like writes; COM-first when viable, ADR 0008)."""
 
     def read_range_with_metadata(
         self,

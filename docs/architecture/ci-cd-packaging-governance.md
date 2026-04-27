@@ -1,6 +1,6 @@
 # CI/CD, packaging, and PyPI governance
 
-**Last reviewed:** 2026-04-28
+**Last reviewed:** 2026-04-2
 
 This document defines how **continuous integration**, **release packaging**, and **PyPI publishing** should operate for the **`excel-com-mcp`** distribution (fork-published package name). It is aligned with the same structural ideas used in the reference **`workflows`** repository (reusable quality gates, manual release paths, least-privilege permissions, documented check names), adapted for **Python**, **Hatch**, and **PyPI** instead of npm.
 
@@ -32,7 +32,7 @@ These filenames are the **live** layout under `.github/workflows/` on this fork 
 
 | Workflow | Trigger | Role |
 |----------|---------|------|
-| `ci.yml` (or equivalent) | `push` / `pull_request` to protected branches | Calls reusable validation (fast feedback for contributors). |
+| `ci.yml` (or equivalent) | `push` / `pull_request` / `merge_group` to protected branches | Calls reusable validation (fast feedback for contributors; `merge_group` covers [merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) pre-merge checks). |
 | `reusable-validate-and-test.yml` | `workflow_call` only | Checkout (optional ref), set up Python, install project + dev deps, **pytest**, optional linters, **`hatch build`**, **`twine check dist/*`**. |
 | `release-packaging.yml` | `workflow_dispatch` | Inputs: `release_ref`, optional `artifact_retention_days` → reusable gates → `hatch build` → **upload-artifact** (`dist/*.whl`, `*.tar.gz`). |
 | `release-pypi-publish.yml` | `workflow_dispatch` | Inputs: `release_ref`, target (`pypi` / `testpypi` or env-based) → reusable gates → **`pypa/gh-action-pypi-publish`** with trusted publishing. |

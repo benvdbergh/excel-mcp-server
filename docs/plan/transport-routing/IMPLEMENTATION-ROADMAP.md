@@ -2,7 +2,7 @@
 
 This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **epics and stories** under `docs/plan/transport-routing/`, aligned with `docs/architecture/target-architecture.md` and ADRs `docs/architecture/adr/`.
 
-**Status (2026-04-28):** Epics **1–9** are implemented. **Epic 9** ([cloud / SharePoint workbook locators for COM](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md)) is **delivered** (Stories 9-1, 9-2). **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap. **Epic 10** ([COM read-class tools and routing](Epics/Epic-10-com-read-class-tools-and-routing.md)) is **superseded** by **[Epic 11](Epics/Epic-11-com-first-session-and-lifecycle.md)** — Epic-10 and **Story-10-*** files remain **historical** (ADR 0007 opt-in / file-default reads); **current delivery** follows **[ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)** and Epic-11. **Epic 11** is **planned** (draft epic and stories).
+**Status (2026-04-27):** Epics **1–9** and **Epic 11** are **delivered** in code and operator docs. **Epic 9** ([cloud / SharePoint workbook locators for COM](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md)) is **delivered**. **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap. **Epic 10** ([COM read-class tools and routing](Epics/Epic-10-com-read-class-tools-and-routing.md)) is **superseded** by **[Epic 11](Epics/Epic-11-com-first-session-and-lifecycle.md)** — Epic-10 and **Story-10-*** files remain **historical** (ADR 0007 opt-in / file-default reads); **current behavior** follows **[ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)** and Epic-11 ([`CHANGELOG.md`](../../../CHANGELOG.md) **0.3.0**).
 
 ## Phasing (execution order)
 
@@ -18,11 +18,11 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | 8 | [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md) | Governed CI/CD, reusable gates, manual packaging/publish, PyPI (**`excel-com-mcp`**) *(delivered)* |
 | 9 | [Epic-9](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md) | SharePoint / `https` workbook locators for COM routing, URL allowlist, docs *(delivered)* |
 | 10 | [Epic-10](Epics/Epic-10-com-read-class-tools-and-routing.md) | *(Historical — superseded by Epic-11; ADR 0007-era opt-in COM reads.)* |
-| 11 | [Epic-11](Epics/Epic-11-com-first-session-and-lifecycle.md) | COM-first default routing, COM read parity, remove `save_after_write`, lifecycle tools, docs/tests *(planned)* |
+| 11 | [Epic-11](Epics/Epic-11-com-first-session-and-lifecycle.md) | COM-first default routing, COM read parity, remove `save_after_write`, lifecycle tools, docs/tests *(delivered; **0.3.0**)* |
 
-## Epic-11: COM-first session and lifecycle (current plan)
+## Epic-11: COM-first session and lifecycle (delivered)
 
-**Epic document:** [Epic-11 — COM-first session and lifecycle](Epics/Epic-11-com-first-session-and-lifecycle.md).
+**Epic document:** [Epic-11 — COM-first session and lifecycle](Epics/Epic-11-com-first-session-and-lifecycle.md). **PyPI / version line:** **0.3.0** (see [`CHANGELOG.md`](../../../CHANGELOG.md)).
 
 **Traces to:** [ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md), [COM-first workbook session design](../../architecture/com-first-workbook-session-design.md), [com-read-class-tools design](../../architecture/com-read-class-tools-design.md) (implementation parity), [ADR 0004](../../architecture/adr/0004-chart-pivot-com-parity-scope.md) (file-forced exceptions), [ADR 0005](../../architecture/adr/0005-com-strict-and-fallback-controls.md), [ADR 0006](../../architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md).
 

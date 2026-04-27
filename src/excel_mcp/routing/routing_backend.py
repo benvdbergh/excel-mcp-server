@@ -80,12 +80,11 @@ class RoutingBackend:
         Reason strings align with ``docs/architecture/target-architecture.md``
         (e.g. ``full_name_match``, ``forced_file``, ``forced_com``).
 
-        **``transport="file"``** — always file, reason ``forced_file``.
+        **ADR 0008 — COM-first default:** :attr:`~ToolKind.READ` uses the **same**
+        decision tree as :attr:`~ToolKind.WRITE` for each ``transport`` (``auto``,
+        ``com``, ``file``). There is no separate read-class file short-circuit.
 
-        **ADR 0003 — read-class tools:** :attr:`~ToolKind.READ` always selects the
-        **file** backend with reason ``read_class_file_backed`` for every
-        ``transport`` (``auto``, ``com``, ``file``). This runs before open/COM
-        checks so reads never route to COM in v1.
+        **``transport="file"``** — always file, reason ``forced_file``.
 
         **``transport="auto"``** — file when the workbook is not reported open;
         reason ``auto_workbook_not_open_file``. When open and ``tool_kind`` is
@@ -112,14 +111,12 @@ class RoutingBackend:
         is not ``win32``.
         """
         tk = _normalize_tool_kind(tool_kind)
-        req: WorkbookTransport | None = transport
-
-        if tk == ToolKind.READ:
-            return WorkbookBackendResolution(
-                backend="file",
-                reason="read_class_file_backed",
-                requested_transport=req,
+        if tk == ToolKind.SESSION:
+            raise ValueError(
+                "ToolKind.SESSION tools do not use resolve_workbook_backend; "
+                "use COM lifecycle entry points (ADR 0008)"
             )
+        req: WorkbookTransport | None = transport
 
         if transport == "file":
             return WorkbookBackendResolution(

@@ -70,7 +70,7 @@ def test_dispatch_logs_required_fields_and_redacts_path(caplog: pytest.LogCaptur
     data = _last_json_record(caplog)
     assert data["workbook_transport"] == "file"
     assert data["workbook_backend"] == "file"
-    assert data["routing_reason"] == "read_class_file_backed"
+    assert data["routing_reason"] == "forced_file"
     assert data["operation_name"] == "workbook_metadata"
     assert data["mcp_tool_name"] == "get_workbook_metadata"
     assert data["workbook_path"] == "book.xlsx"

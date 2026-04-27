@@ -15,7 +15,6 @@ from excel_mcp.routing.routing_backend import WorkbookTransport
 EXCEL_MCP_TRANSPORT = "EXCEL_MCP_TRANSPORT"
 EXCEL_MCP_COM_STRICT = "EXCEL_MCP_COM_STRICT"
 EXCEL_MCP_COM_ALLOW_FILE_FALLBACK = "EXCEL_MCP_COM_ALLOW_FILE_FALLBACK"
-EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT = "EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT"
 
 _VALID_WORKBOOK_TRANSPORTS: frozenset[str] = frozenset({"auto", "file", "com"})
 _TRUTHY = frozenset({"1", "true", "yes"})
@@ -102,36 +101,6 @@ def read_com_allow_file_fallback(environ: Mapping[str, str] | None = None) -> bo
     )
 
 
-def read_save_after_write_default(
-    environ: Mapping[str, str] | None = None,
-) -> bool:
-    """Read ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT`` (FR-8).
-
-    When unset or empty, returns ``False`` (no extra explicit save after mutating
-    file-backed tools; COM parity default is “no save until requested”).
-
-    Truthy for ``1``, ``true``, ``yes``; falsy for ``0``, ``false``, ``no``.
-
-    Raises:
-        ValueError: If set to a non-empty value that is neither truthy nor falsy.
-    """
-    env = os.environ if environ is None else environ
-    raw = env.get(EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT)
-    if raw is None:
-        return False
-    token = raw.strip().lower()
-    if not token:
-        return False
-    if token in _TRUTHY:
-        return True
-    if token in _FALSY:
-        return False
-    raise ValueError(
-        f"Invalid {EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT}={raw!r}: use '1'/'true'/'yes' "
-        f"or '0'/'false'/'no' (case-insensitive), or leave unset for default false."
-    )
-
-
 def resolve_workbook_transport(
     override: str | None,
     environ: Mapping[str, str] | None = None,
@@ -152,16 +121,6 @@ def resolve_workbook_transport(
             f"'com' (workbook routing per ADR 0001; not MCP wire transport)."
         )
     return cast(WorkbookTransport, token)
-
-
-def effective_save_after_write(
-    save_after_write: bool | None,
-    environ: Mapping[str, str] | None = None,
-) -> bool:
-    """Resolve optional tool ``save_after_write`` against env default."""
-    if save_after_write is None:
-        return read_save_after_write_default(environ)
-    return save_after_write
 
 
 def effective_com_strict(environ: Mapping[str, str] | None = None) -> bool:

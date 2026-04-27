@@ -24,10 +24,8 @@ from excel_mcp.routing import (
     FileWorkbookService,
     RoutingBackend,
     StubWorkbookOpenInExcel,
-    ToolKind,
     contract_operation_name_for_mcp_tool,
     effective_com_strict,
-    effective_save_after_write,
     execute_routed_workbook_operation,
     get_tool_kind,
     resolve_workbook_transport,
@@ -96,11 +94,10 @@ def _workbook_dispatch(
     mcp_tool_name: str,
     filepath: str,
     workbook_transport: Optional[str],
-    save_after_write: Optional[bool],
     do_op: Callable[[str], str],
     com_do_op: Callable[[str], str] | None = None,
 ) -> str:
-    """Resolve path, route transport, run one contract op, optional explicit save."""
+    """Resolve path, route transport, run one contract op."""
     full_path = get_excel_path(filepath)
     transport = resolve_workbook_transport(workbook_transport)
     com_strict = effective_com_strict()
@@ -109,7 +106,7 @@ def _workbook_dispatch(
     com_callable: Callable[[], str] | None = None
     if _COM_WORKBOOK_SERVICE is not None and com_do_op is not None:
         com_callable = lambda: com_do_op(full_path)
-    out, backend = execute_routed_workbook_operation(
+    out, _backend = execute_routed_workbook_operation(
         _ROUTING_BACKEND,
         _FILE_WORKBOOK_SERVICE,
         resolved_path=full_path,
@@ -121,11 +118,6 @@ def _workbook_dispatch(
         com_operation_callable=com_callable,
         mcp_tool_name=mcp_tool_name,
     )
-    if tool_kind != ToolKind.READ and effective_save_after_write(save_after_write):
-        if backend == "file":
-            _FILE_WORKBOOK_SERVICE.save_workbook(full_path)
-        elif backend == "com" and _COM_WORKBOOK_SERVICE is not None:
-            _COM_WORKBOOK_SERVICE.save_workbook(full_path)
     return out
 
 
@@ -148,7 +140,8 @@ mcp = FastMCP(
         "URL that matches Excel Workbook.FullName (in VBA Immediate use ? ActiveWorkbook.FullName). "
         "If Excel reports https but you pass only a local synced path, COM may not match. "
         "M365 sign-in is via Excel/Office, not this server. "
-        "Optional on tools: workbook_transport (auto|file|com), save_after_write. "
+        "Optional on tools: workbook_transport (auto|file|com). "
+        "Lifecycle: excel_open_workbook, excel_close_workbook (COM). create_workbook optional open_in_excel. "
         "Env: EXCEL_MCP_TRANSPORT, EXCEL_MCP_ALLOWED_PATHS, EXCEL_MCP_ALLOWED_URL_PREFIXES (with path allowlist). "
         "Full operator docs: repository README and TOOLS.md; local Cursor MCP: README section on uv run --project."
     ),
@@ -209,7 +202,6 @@ def apply_formula(
     cell: str,
     formula: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Apply Excel formula to cell.
@@ -220,7 +212,6 @@ def apply_formula(
             "apply_formula",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.apply_formula(
                 fp, sheet_name, cell, formula
             ),
@@ -248,7 +239,6 @@ def validate_formula_syntax(
     cell: str,
     formula: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Validate Excel formula syntax without applying it."""
     try:
@@ -256,9 +246,13 @@ def validate_formula_syntax(
             "validate_formula_syntax",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.validate_formula_syntax(
                 fp, sheet_name, cell, formula
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.validate_formula_syntax(
+                    fp, sheet_name, cell, formula
+                )
             ),
         )
     except (ValidationError, CalculationError) as e:
@@ -295,7 +289,6 @@ def format_range(
     protection: Optional[Dict[str, Any]] = None,
     conditional_format: Optional[Dict[str, Any]] = None,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Apply formatting to a range of cells."""
     try:
@@ -303,7 +296,6 @@ def format_range(
             "format_range",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.format_range(
                 fp,
                 sheet_name,
@@ -368,7 +360,6 @@ def read_data_from_excel(
     end_cell: Optional[str] = None,
     preview_only: bool = False,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
@@ -389,13 +380,21 @@ def read_data_from_excel(
             "read_data_from_excel",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
                 fp,
                 sheet_name,
                 start_cell,
                 end_cell,
                 preview_only,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.read_range_with_metadata(
+                    fp,
+                    sheet_name,
+                    start_cell,
+                    end_cell,
+                    preview_only,
+                )
             ),
         )
     except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
@@ -416,7 +415,6 @@ def write_data_to_excel(
     data: List[List],
     start_cell: str = "A1",
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Write data to Excel worksheet.
@@ -434,7 +432,6 @@ def write_data_to_excel(
             "write_data_to_excel",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.write_cell_grid(
                 fp, sheet_name, data, start_cell
             ),
@@ -459,24 +456,82 @@ def write_data_to_excel(
 def create_workbook(
     filepath: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
+    open_in_excel: bool = False,
 ) -> str:
-    """Create new Excel workbook."""
+    """Create new Excel workbook.
+
+    When ``open_in_excel`` is true and COM is available, opens the file in Excel
+    after creation (ADR 0008 lifecycle).
+    """
     try:
-        return _workbook_dispatch(
+        resolved = get_excel_path(filepath)
+        out = _workbook_dispatch(
             "create_workbook",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_workbook(fp),
             com_do_op=_com_dispatch(lambda c, fp: c.create_workbook(fp)),
         )
+        if open_in_excel:
+            if _COM_WORKBOOK_SERVICE is None:
+                return (
+                    f"{out}\n"
+                    "Note: open_in_excel was ignored (Excel COM is not available)."
+                )
+            if not str(out).lstrip().lower().startswith("error:"):
+                extra = _COM_WORKBOOK_SERVICE.open_workbook_in_excel(resolved)
+                return f"{out}\n{extra}"
+        return out
     except WorkbookError as e:
         return f"Error: {str(e)}"
     except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"Error creating workbook: {e}")
+        raise
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Open Workbook in Excel",
+        destructiveHint=True,
+    ),
+)
+def excel_open_workbook(filepath: str) -> str:
+    """Open an existing workbook in the Excel host (``Workbooks.Open``).
+
+    Binds the workbook for subsequent COM-first routing when identity matches.
+    Requires Windows Excel COM (ADR 0008).
+    """
+    try:
+        resolved = get_excel_path(filepath)
+        if _COM_WORKBOOK_SERVICE is None:
+            return "Error: Excel COM automation is not available on this host."
+        return _COM_WORKBOOK_SERVICE.open_workbook_in_excel(resolved)
+    except ValueError as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"excel_open_workbook: {e}")
+        raise
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Close Workbook in Excel",
+        destructiveHint=True,
+    ),
+)
+def excel_close_workbook(filepath: str, save: bool = False) -> str:
+    """Close a workbook in the Excel host. Optionally save to disk first (ADR 0008)."""
+    try:
+        resolved = get_excel_path(filepath)
+        if _COM_WORKBOOK_SERVICE is None:
+            return "Error: Excel COM automation is not available on this host."
+        return _COM_WORKBOOK_SERVICE.close_workbook_in_excel(resolved, save=save)
+    except ValueError as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"excel_close_workbook: {e}")
         raise
 
 
@@ -489,24 +544,17 @@ def create_workbook(
 def save_workbook(
     filepath: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Persist the workbook to disk (file backend or COM host save).
 
-    Use this before ``read_data_from_excel`` when mutations ran via COM with
-    ``save_after_write=false`` so on-disk state matches Excel (ADR 0003).
-
-    The optional ``save_after_write`` follows the same env default as other
-    tools: when ``true``, the server runs a second explicit save after the
-    primary ``save_workbook`` operation. That is idempotent (save then save).
-    When omitted or ``false`` (default), only one save runs.
+    Use this before ``read_data_from_excel`` when mutations ran via COM so
+    on-disk state matches Excel (ADR 0003).
     """
     try:
         return _workbook_dispatch(
             "save_workbook",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.save_workbook(fp),
             com_do_op=_com_dispatch(lambda c, fp: c.save_workbook(fp)),
         )
@@ -529,7 +577,6 @@ def create_worksheet(
     filepath: str,
     sheet_name: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Create new worksheet in workbook."""
     try:
@@ -537,7 +584,6 @@ def create_worksheet(
             "create_worksheet",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_worksheet(fp, sheet_name),
             com_do_op=_com_dispatch(
                 lambda c, fp: c.create_worksheet(fp, sheet_name)
@@ -567,7 +613,6 @@ def create_chart(
     x_axis: str = "",
     y_axis: str = "",
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Create chart in worksheet."""
     try:
@@ -575,7 +620,6 @@ def create_chart(
             "create_chart",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_chart_in_sheet(
                 fp,
                 sheet_name,
@@ -622,7 +666,6 @@ def create_pivot_table(
     columns: Optional[List[str]] = None,
     agg_func: str = "mean",
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Create pivot table in worksheet."""
     try:
@@ -630,7 +673,6 @@ def create_pivot_table(
             "create_pivot_table",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_pivot_table_in_sheet(
                 fp,
                 sheet_name,
@@ -673,7 +715,6 @@ def create_table(
     table_name: Optional[str] = None,
     table_style: str = "TableStyleMedium9",
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Creates a native Excel table from a specified range of data."""
     try:
@@ -681,7 +722,6 @@ def create_table(
             "create_table",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_excel_table(
                 fp,
                 sheet_name,
@@ -718,7 +758,6 @@ def copy_worksheet(
     source_sheet: str,
     target_sheet: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Copy worksheet within workbook."""
     try:
@@ -726,7 +765,6 @@ def copy_worksheet(
             "copy_worksheet",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.copy_worksheet(
                 fp, source_sheet, target_sheet
             ),
@@ -752,7 +790,6 @@ def delete_worksheet(
     filepath: str,
     sheet_name: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete worksheet from workbook."""
     try:
@@ -760,7 +797,6 @@ def delete_worksheet(
             "delete_worksheet",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_worksheet(fp, sheet_name),
             com_do_op=_com_dispatch(
                 lambda c, fp: c.delete_worksheet(fp, sheet_name)
@@ -785,7 +821,6 @@ def rename_worksheet(
     old_name: str,
     new_name: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Rename worksheet in workbook."""
     try:
@@ -793,7 +828,6 @@ def rename_worksheet(
             "rename_worksheet",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.rename_worksheet(
                 fp, old_name, new_name
             ),
@@ -819,7 +853,6 @@ def get_workbook_metadata(
     filepath: str,
     include_ranges: bool = False,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Get metadata about workbook including sheets, ranges, etc."""
     try:
@@ -827,9 +860,13 @@ def get_workbook_metadata(
             "get_workbook_metadata",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.workbook_metadata(
                 fp, include_ranges=include_ranges
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.workbook_metadata(
+                    fp, include_ranges=include_ranges
+                )
             ),
         )
     except WorkbookError as e:
@@ -852,7 +889,6 @@ def merge_cells(
     start_cell: str,
     end_cell: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Merge a range of cells."""
     try:
@@ -860,7 +896,6 @@ def merge_cells(
             "merge_cells",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.merge_cells(
                 fp, sheet_name, start_cell, end_cell
             ),
@@ -890,7 +925,6 @@ def unmerge_cells(
     start_cell: str,
     end_cell: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Unmerge a range of cells."""
     try:
@@ -898,7 +932,6 @@ def unmerge_cells(
             "unmerge_cells",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.unmerge_cells(
                 fp, sheet_name, start_cell, end_cell
             ),
@@ -926,7 +959,6 @@ def get_merged_cells(
     filepath: str,
     sheet_name: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Get merged cells in a worksheet."""
     try:
@@ -934,9 +966,11 @@ def get_merged_cells(
             "get_merged_cells",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.read_merged_cell_ranges(
                 fp, sheet_name
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.read_merged_cell_ranges(fp, sheet_name)
             ),
         )
     except (ValidationError, SheetError) as e:
@@ -961,7 +995,6 @@ def copy_range(
     target_start: str,
     target_sheet: Optional[str] = None,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Copy a range of cells to another location."""
     try:
@@ -969,7 +1002,6 @@ def copy_range(
             "copy_range",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.copy_cell_range(
                 fp,
                 sheet_name,
@@ -1010,7 +1042,6 @@ def delete_range(
     end_cell: str,
     shift_direction: str = "up",
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete a range of cells and shift remaining cells."""
     try:
@@ -1018,7 +1049,6 @@ def delete_range(
             "delete_range",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_cell_range(
                 fp,
                 sheet_name,
@@ -1056,7 +1086,6 @@ def validate_excel_range(
     start_cell: str,
     end_cell: Optional[str] = None,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Validate if a range exists and is properly formatted."""
     try:
@@ -1064,9 +1093,13 @@ def validate_excel_range(
             "validate_excel_range",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.validate_sheet_range(
                 fp, sheet_name, start_cell, end_cell
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.validate_sheet_range(
+                    fp, sheet_name, start_cell, end_cell
+                )
             ),
         )
     except ValidationError as e:
@@ -1087,7 +1120,6 @@ def get_data_validation_info(
     filepath: str,
     sheet_name: str,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """
     Get all data validation rules in a worksheet.
@@ -1107,9 +1139,11 @@ def get_data_validation_info(
             "get_data_validation_info",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.read_worksheet_data_validation(
                 fp, sheet_name
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.read_worksheet_data_validation(fp, sheet_name)
             ),
         )
     except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
@@ -1130,7 +1164,6 @@ def insert_rows(
     start_row: int,
     count: int = 1,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Insert one or more rows starting at the specified row."""
     try:
@@ -1138,7 +1171,6 @@ def insert_rows(
             "insert_rows",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.insert_rows(
                 fp, sheet_name, start_row, count
             ),
@@ -1166,7 +1198,6 @@ def insert_columns(
     start_col: int,
     count: int = 1,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Insert one or more columns starting at the specified column."""
     try:
@@ -1174,7 +1205,6 @@ def insert_columns(
             "insert_columns",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.insert_columns(
                 fp, sheet_name, start_col, count
             ),
@@ -1202,7 +1232,6 @@ def delete_sheet_rows(
     start_row: int,
     count: int = 1,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete one or more rows starting at the specified row."""
     try:
@@ -1210,7 +1239,6 @@ def delete_sheet_rows(
             "delete_sheet_rows",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_sheet_rows(
                 fp, sheet_name, start_row, count
             ),
@@ -1240,7 +1268,6 @@ def delete_sheet_columns(
     start_col: int,
     count: int = 1,
     workbook_transport: Optional[str] = None,
-    save_after_write: Optional[bool] = None,
 ) -> str:
     """Delete one or more columns starting at the specified column."""
     try:
@@ -1248,7 +1275,6 @@ def delete_sheet_columns(
             "delete_sheet_columns",
             filepath,
             workbook_transport,
-            save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_sheet_columns(
                 fp, sheet_name, start_col, count
             ),

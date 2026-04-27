@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-11
 title: COM-first default routing, COM read parity, explicit lifecycle, and operator docs
-status: draft
+status: done
 depends_on:
   - EPIC-6
   - EPIC-9

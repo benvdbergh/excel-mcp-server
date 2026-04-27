@@ -3,15 +3,17 @@
 Cites:
 - PRD: ``docs/specs/PRD-excel-mcp-transport-routing.md``
 - Blueprint: ``docs/excel-mcp-fork-com-vs-file-routing.md``
-- ADR 0003 (file-backed reads; read defaults align with file backend)
+- ADR 0008 (COM-first default; read-class tools use the same transport branches as writes)
 - ADR 0004 (chart/pivot v1 exception: tool-forced file backend)
 - ``docs/architecture/pre-fork-architecture.md`` (25 tools)
 
 Classifications:
-- ``READ``: safe read-style tools; default routing aligns with file-backed reads.
+- ``READ``: safe read-style tools; default routing is COM-first when ``auto``/``com`` and COM is viable (same as ``WRITE``).
 - ``WRITE``: mutating tools.
 - ``V1_FILE_FORCED``: v1 routing must use the file backend regardless of
   auto→COM (ADR 0004 policy 1).
+- ``SESSION``: Excel host lifecycle (``Workbooks.Open`` / close); does not use
+  :meth:`RoutingBackend.resolve_workbook_backend` — COM entry points only (ADR 0008).
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ class ToolKind(str, Enum):
     READ = "read"
     WRITE = "write"
     V1_FILE_FORCED = "v1_file_forced"
+    SESSION = "session"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +77,14 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
     "insert_columns": ToolInventoryEntry(ToolKind.WRITE),
     "delete_sheet_rows": ToolInventoryEntry(ToolKind.WRITE),
     "delete_sheet_columns": ToolInventoryEntry(ToolKind.WRITE),
+    "excel_open_workbook": ToolInventoryEntry(
+        ToolKind.SESSION,
+        notes="ADR 0008: Workbooks.Open; not resolved via file/openpyxl backend.",
+    ),
+    "excel_close_workbook": ToolInventoryEntry(
+        ToolKind.SESSION,
+        notes="ADR 0008: close workbook in Excel host with optional save.",
+    ),
 }
 
 MCP_TOOL_INVENTORY: Final[Mapping[str, ToolInventoryEntry]] = MappingProxyType(

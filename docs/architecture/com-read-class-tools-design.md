@@ -1,6 +1,6 @@
 # COM read-class tools: design note (software architecture)
 
-**Status:** **[ADR 0008](adr/0008-com-first-default-and-file-lifecycle-tools.md)** is the **accepted** product direction: **COM-first** reads when viable, **file** fallback otherwise. [ADR 0007](adr/0007-com-read-class-tools-routing.md) (**superseded**) described **file-first + opt-in COM reads**—retained below only where it still describes **current shipped code** until implementation catches up.
+**Status:** **[ADR 0008](adr/0008-com-first-default-and-file-lifecycle-tools.md)** is the **accepted** product direction: **COM-first** reads when viable, **file** fallback otherwise. [ADR 0007](adr/0007-com-read-class-tools-routing.md) (**superseded**) described **file-first + opt-in COM reads**—the **gap list in §1** below records the **pre–Epic-11** state; mainline code now implements COM-first routing, `com_do_op` on read handlers, and **non-stub** `ComWorkbookService` read paths (see [Epic-11](../../plan/transport-routing/Epics/Epic-11-com-first-session-and-lifecycle.md)).
 
 For session semantics, lifecycle tools, SSE jail, and routing matrix, see **[COM-first workbook session design](com-first-workbook-session-design.md)**.
 
@@ -10,31 +10,25 @@ This note records what it takes for **all read-class MCP tools** to execute agai
 
 ---
 
-## 1. Current behavior (shipped code) vs target (ADR 0008)
+## 1. **Historical** pre–Epic-11 behavior vs **current** (ADR 0008) implementation
 
-### 1.1 Routing: today read-class tools always use the file backend
+The following subsections document the **old** state (read→file only, no `com_do_op`, COM read stubs) for **traceability**. **Current** `main` after **Epic 11** implements **COM-first** for `ToolKind.READ`, `com_do_op` on all read-class handlers, and **COM** implementations for the read contract methods in [`com_workbook_service.py`](../../src/excel_mcp/routing/com_workbook_service.py) (with `V1_FILE_FORCED` unchanged for chart/pivot per [ADR 0004](adr/0004-chart-pivot-com-parity-scope.md)).
 
-[`RoutingBackend.resolve_workbook_backend`](../../src/excel_mcp/routing/routing_backend.py) implements **ADR 0003** Phase 1: for `tool_kind == ToolKind.READ`, resolution returns the **file** backend with reason `read_class_file_backed` for every `workbook_transport` (`auto`, `com`, `file`). That branch runs **before** open/workbook and COM-viability checks, so **reads never route to COM** in the current implementation.
+### 1.1 (Historical) Routing: read-class always used the file backend
 
-**Target ([ADR 0008](adr/0008-com-first-default-and-file-lifecycle-tools.md)):** **Remove** this short-circuit; **READ** follows the **same COM-first / file fallback** rules as **WRITE** (except `V1_FILE_FORCED` per [ADR 0004](adr/0004-chart-pivot-com-parity-scope.md)).
+Previously, `read_class_file_backed` short-circuited `ToolKind.READ` to the file backend. **Current:** that branch is **removed**; `READ` uses the same resolution as `WRITE` (see `routing_backend.py`).
 
-Implication **today**: even with `workbook_transport="com"`, a read tool still executes the openpyxl path when the resolved `filepath` is a disk path.
+### 1.2 (Historical) Read handlers omitted `com_do_op`
 
-### 1.2 Dispatch: no `com_do_op` for read handlers
-
-[`_workbook_dispatch`](../../src/excel_mcp/server.py) passes an optional `com_do_op` into `execute_routed_workbook_operation`. **Write** tools supply `com_do_op` via `_com_dispatch`. **Read** tools (`read_data_from_excel`, `get_workbook_metadata`, `get_merged_cells`, `validate_excel_range`, `get_data_validation_info`, `validate_formula_syntax`) pass **only** the file `do_op` lambda—**no** `com_do_op`.
-
-So even if routing were changed to allow `backend="com"`, the dispatch layer would raise [`ComExecutionNotImplementedError`](../../src/excel_mcp/routing/routing_errors.py) when `com_operation_callable` is `None` (see [`execute_routed_workbook_operation`](../../src/excel_mcp/routing/routed_dispatch.py)).
+**Current:** all read-class tools in the inventory pass `com_do_op` (see `server.py` and `tests/test_read_class_com_wiring.py`).
 
 ### 1.3 Cloud HTTPS locators and the file backend
 
-[`execute_routed_workbook_operation`](../../src/excel_mcp/routing/routed_dispatch.py) special-cases the file path: if the resolved path is a **cloud workbook locator** (`is_cloud_workbook_locator`) and the selected backend is **file**, it returns a fixed error string (openpyxl cannot open the URL). Today, read tools are always file-backed, so **all read tools fail for HTTPS `filepath` values** unless behavior changes.
+[`execute_routed_workbook_operation`](../../src/excel_mcp/routing/routed_dispatch.py) still returns a **fixed error** when the **file** backend is selected for a pure `https` locator. **With COM-first reads**, when routing selects **COM** and the identity matches Excel, read tools can target **cloud** workbooks; when routing falls back to **file**, the HTTPS+file case remains invalid for openpyxl.
 
-### 1.4 `ComWorkbookService` read methods are stubs
+### 1.4 (Historical) `ComWorkbookService` read methods were stubs
 
-[`ComWorkbookService`](../../src/excel_mcp/routing/com_workbook_service.py) implements the same [`RoutedWorkbookOperations`](../../src/excel_mcp/routing/workbook_operation_contract.py) surface as the file façade, but **read** methods (`read_range_with_metadata`, `workbook_metadata`, `read_merged_cell_ranges`, `read_worksheet_data_validation`, `validate_sheet_range`, `validate_formula_syntax`) currently return the shared **“not implemented”** stub string. Real COM read behavior is not wired from MCP because routing and handlers never select COM for reads.
-
-The contract already foresees **opt-in COM reads** via `WorkbookOperationMetadata` / `com_read_opt_in` in [`workbook_operation_contract.py`](../../src/excel_mcp/routing/workbook_operation_contract.py) (see comment tracing to ADR 0003).
+**Current:** read methods run on the COM executor and return shapes aligned with the file façade (see implementation in `com_workbook_service.py`). `WorkbookOperationMetadata` / `com_read_opt_in` remain in the contract for forward use; default COM reads are **not** “opt-in only” (ADR 0008 supersedes that product gate).
 
 ---
 

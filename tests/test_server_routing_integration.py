@@ -35,12 +35,12 @@ def test_read_path_logs_routing_json(
     last = payloads[-1]
     assert last["workbook_transport"] == "file"
     assert last["workbook_backend"] == "file"
-    assert last["routing_reason"] == "read_class_file_backed"
+    assert last["routing_reason"] == "forced_file"
     assert last["operation_name"] == "workbook_metadata"
     assert last["mcp_tool_name"] == "get_workbook_metadata"
 
 
-def test_write_path_with_save_after_write(tmp_path: Path) -> None:
+def test_write_path_file_backend(tmp_path: Path) -> None:
     p = tmp_path / "route_write.xlsx"
     Workbook().save(p)
     path = str(p.resolve())
@@ -53,6 +53,5 @@ def test_write_path_with_save_after_write(tmp_path: Path) -> None:
         [["x"]],
         start_cell="A1",
         workbook_transport="file",
-        save_after_write=True,
     )
     assert "success" in msg.lower() or "written" in msg.lower() or "Error" not in msg

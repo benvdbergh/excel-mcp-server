@@ -34,12 +34,30 @@ class _FakeWorkbookOpen:
 _PATH = r"C:\tmp\book.xlsx"
 
 
-def test_auto_closed_workbook_uses_file() -> None:
+def test_session_tool_must_not_use_resolve_workbook_backend() -> None:
+    """ADR 0008: ToolKind.SESSION bypasses file/COM routing resolution."""
+    rb = RoutingBackend(
+        _FakeWorkbookOpen(always=True),
+        com_execution_available=True,
+        runtime_platform="win32",
+    )
+    with pytest.raises(ValueError, match="SESSION"):
+        rb.resolve_workbook_backend(
+            resolved_path=_PATH,
+            transport="auto",
+            tool_kind=ToolKind.SESSION,
+            com_strict=False,
+        )
+
+
+@pytest.mark.parametrize("tool_kind", [ToolKind.READ, ToolKind.WRITE], ids=["read", "write"])
+def test_auto_closed_workbook_uses_file(tool_kind: ToolKind) -> None:
+    """ADR 0008: READ and WRITE both get file when auto and workbook not open."""
     rb = RoutingBackend(_FakeWorkbookOpen(frozenset()), runtime_platform="win32")
     r = rb.resolve_workbook_backend(
         resolved_path=_PATH,
         transport="auto",
-        tool_kind=ToolKind.WRITE,
+        tool_kind=tool_kind,
         com_strict=True,
     )
     assert r == WorkbookBackendResolution(
@@ -49,7 +67,7 @@ def test_auto_closed_workbook_uses_file() -> None:
     )
 
 
-def test_read_auto_open_workbook_stays_file_adr0003() -> None:
+def test_read_auto_open_workbook_uses_com_when_viable_adr0008() -> None:
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset({_PATH})),
         com_execution_available=True,
@@ -61,12 +79,12 @@ def test_read_auto_open_workbook_stays_file_adr0003() -> None:
         tool_kind=ToolKind.READ,
         com_strict=False,
     )
-    assert r.backend == "file"
-    assert r.reason == "read_class_file_backed"
+    assert r.backend == "com"
+    assert r.reason == "full_name_match"
     assert r.requested_transport == "auto"
 
 
-def test_read_com_transport_stays_file_adr0003() -> None:
+def test_read_com_transport_forced_com_when_viable_adr0008() -> None:
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset({_PATH})),
         com_execution_available=True,
@@ -78,11 +96,12 @@ def test_read_com_transport_stays_file_adr0003() -> None:
         tool_kind=ToolKind.READ,
         com_strict=True,
     )
-    assert r.backend == "file"
-    assert r.reason == "read_class_file_backed"
+    assert r.backend == "com"
+    assert r.reason == "forced_com"
 
 
-def test_auto_open_workbook_uses_com_when_viable() -> None:
+@pytest.mark.parametrize("tool_kind", [ToolKind.READ, ToolKind.WRITE], ids=["read", "write"])
+def test_auto_open_workbook_uses_com_when_viable(tool_kind: ToolKind) -> None:
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset({_PATH})),
         com_execution_available=True,
@@ -91,12 +110,31 @@ def test_auto_open_workbook_uses_com_when_viable() -> None:
     r = rb.resolve_workbook_backend(
         resolved_path=_PATH,
         transport="auto",
-        tool_kind=ToolKind.WRITE,
+        tool_kind=tool_kind,
         com_strict=False,
     )
     assert r.backend == "com"
     assert r.reason == "full_name_match"
     assert r.requested_transport == "auto"
+
+
+def test_read_file_transport_forced_file() -> None:
+    rb = RoutingBackend(
+        _FakeWorkbookOpen(frozenset({_PATH})),
+        com_execution_available=True,
+        runtime_platform="win32",
+    )
+    r = rb.resolve_workbook_backend(
+        resolved_path=_PATH,
+        transport="file",
+        tool_kind=ToolKind.READ,
+        com_strict=True,
+    )
+    assert r == WorkbookBackendResolution(
+        backend="file",
+        reason="forced_file",
+        requested_transport="file",
+    )
 
 
 def test_forced_file_transport() -> None:

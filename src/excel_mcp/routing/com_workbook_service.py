@@ -7,6 +7,7 @@ import or idle paths).
 
 from __future__ import annotations
 
+import json
 import numbers
 import os
 import re
@@ -14,6 +15,9 @@ import uuid
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import urljoin
 
+from openpyxl.utils import get_column_letter
+
+from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
 
@@ -49,6 +53,8 @@ _XL_UNDERLINE_NONE = -4142
 _XL_SRC_RANGE = 1
 _XL_LIST_HAS_HEADERS_GUESS = 0
 _XL_OPEN_XML_WORKBOOK = 51
+# xlCellTypeAllValidation — ranges containing any data validation (Excel interop).
+_XL_CELLTYPE_ALL_VALIDATION = 4
 _H_ALIGN = {"left": -4131, "center": -4108, "right": -4152, "justify": -4130}
 _BORDER_WEIGHT = {
     "thin": _XL_THIN,
@@ -133,6 +139,248 @@ def _hex_to_bgr_int(color: str) -> int:
         raise ValueError(f"Invalid color: {color}")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return int(r | (g << 8) | (b << 16))
+
+
+# Map Excel XlDVType to openpyxl-style string (cell_validation / get_workbook_info).
+_XL_DVTYPE_STR: Dict[int, str] = {
+    0: "none",
+    1: "whole",
+    2: "decimal",
+    3: "list",
+    4: "date",
+    5: "time",
+    6: "textLength",
+    7: "custom",
+}
+
+
+def _normalize_excel_matrix(val: Any) -> List[List[Any]]:
+    """Shape Excel ``Range.Value2`` / ``Formula`` into a list of rows (see pywin32 shapes)."""
+    if val is None:
+        return [[None]]
+    if not isinstance(val, (tuple, list)):
+        return [[val]]
+    if len(val) == 0:
+        return [[]]
+    if isinstance(val[0], (tuple, list)):
+        return [list(r) for r in val]
+    return [list(val)]
+
+
+def _com_used_bounds(ws: Any) -> Tuple[int, int, int, int]:
+    """Return min_row, min_col, max_row, max_col from ``Worksheet.UsedRange``."""
+    try:
+        u = ws.UsedRange
+        r0 = int(u.Row)
+        c0 = int(u.Column)
+        nr = int(u.Rows.Count)
+        nc = int(u.Columns.Count)
+        return r0, c0, r0 + nr - 1, c0 + nc - 1
+    except Exception:
+        return 1, 1, 1, 1
+
+
+def _com_validation_dict(ws: Any, row: int, col: int, cell_address: str) -> Dict[str, Any]:
+    """Map COM ``Validation`` to the openpyxl-oriented dict used in ``cell_validation``."""
+    try:
+        cell = ws.Cells(row, col)
+        v = cell.Validation
+        vtype = int(v.Type)
+    except Exception:
+        return {"has_validation": False}
+
+    if vtype == 0:
+        return {"has_validation": False}
+
+    type_str = _XL_DVTYPE_STR.get(vtype, "custom")
+    info: Dict[str, Any] = {
+        "cell": cell_address,
+        "has_validation": True,
+        "validation_type": type_str,
+    }
+    try:
+        info["allow_blank"] = bool(getattr(v, "IgnoreBlank", True))
+    except Exception:
+        info["allow_blank"] = True
+    try:
+        op = getattr(v, "Operator", None)
+        if op is not None and int(op) != 0:
+            info["operator"] = int(op)
+    except Exception:
+        pass
+    for attr, key in (
+        ("InputMessage", "prompt"),
+        ("InputTitle", "prompt_title"),
+        ("ErrorMessage", "error_message"),
+        ("ErrorTitle", "error_title"),
+    ):
+        try:
+            s = str(getattr(v, attr, "") or "").strip()
+            if s:
+                info[key] = s
+        except Exception:
+            continue
+    try:
+        f1 = str(getattr(v, "Formula1", "") or "").lstrip("=")
+        f2 = str(getattr(v, "Formula2", "") or "").lstrip("=")
+    except Exception:
+        f1, f2 = "", ""
+    if type_str == "list" and f1:
+        if "," in f1 and "!" not in f1:
+            info["allowed_values"] = [x.strip() for x in f1.split(",") if x.strip()]
+        else:
+            info["allowed_values"] = [f1] if f1 else []
+            if f1 and ("," not in f1) and f1 not in info["allowed_values"]:
+                info["allowed_values"] = [f1]
+    else:
+        if f1:
+            info["formula1"] = f1
+        if f2:
+            info["formula2"] = f2
+    return info
+
+
+def _com_workbook_metadata_dict(wb: Any, filepath: str, include_ranges: bool) -> Dict[str, Any]:
+    """Build a JSON-like dict aligned with :func:`excel_mcp.workbook.get_workbook_info`."""
+    from pathlib import Path
+
+    path = Path(filepath)
+    names: list[str] = []
+    try:
+        n = _coerce_com_count(getattr(wb.Worksheets, "Count", 0))
+    except Exception:
+        n = 0
+    for i in range(1, n + 1):
+        try:
+            names.append(str(wb.Worksheets.Item(i).Name))
+        except Exception:
+            continue
+
+    fn = filepath
+    try:
+        fn = str(wb.FullName)
+    except Exception:
+        pass
+    filename = os.path.basename(fn.rstrip("/")) or fn
+
+    info: Dict[str, Any] = {
+        "filename": filename,
+        "sheets": names,
+        "size": 0,
+        "modified": 0.0,
+    }
+    disk_path: Optional[str] = None
+    try:
+        p = str(getattr(wb, "Path", "") or "").strip()
+        nm = str(getattr(wb, "Name", "") or "").strip()
+        if p and nm:
+            disk_path = os.path.normpath(os.path.join(p, nm))
+    except Exception:
+        disk_path = None
+    if disk_path and os.path.isfile(disk_path):
+        try:
+            st = os.stat(disk_path)
+            info["size"] = st.st_size
+            info["modified"] = st.st_mtime
+        except OSError:
+            pass
+    elif path.is_file():
+        try:
+            st = path.stat()
+            info["size"] = st.st_size
+            info["modified"] = st.st_mtime
+        except OSError:
+            pass
+
+    if include_ranges:
+        ranges: Dict[str, str] = {}
+        for i in range(1, n + 1):
+            try:
+                ws = wb.Worksheets.Item(i)
+                name = str(ws.Name)
+                mr, mc = _com_used_bounds(ws)[2:]
+                if mr >= 1 and mc >= 1:
+                    ranges[name] = f"A1:{get_column_letter(mc)}{mr}"
+            except Exception:
+                continue
+        info["used_ranges"] = ranges
+    return info
+
+
+def _com_sheet_merge_addresses(ws: Any) -> List[str]:
+    """Return merged range addresses (e.g. ``A1:B2``) for a COM worksheet."""
+    seen: set[str] = set()
+    out: List[str] = []
+    try:
+        u = ws.UsedRange
+    except Exception:
+        return []
+    try:
+        r0, c0 = int(u.Row), int(u.Column)
+        nr, nc = int(u.Rows.Count), int(u.Columns.Count)
+    except Exception:
+        return []
+    for r in range(r0, r0 + nr):
+        for c in range(c0, c0 + nc):
+            try:
+                cell = ws.Cells(r, c)
+                if _com_bool_is_true(getattr(cell, "MergeCells", False)):
+                    area = cell.MergeArea
+                    addr = str(getattr(area, "Address", "")).replace("$", "")
+                    if addr and addr not in seen:
+                        seen.add(addr)
+                        out.append(addr)
+            except Exception:
+                continue
+    return out
+
+
+def _com_validation_rules_for_sheet(ws: Any) -> List[Dict[str, Any]]:
+    """Build a list similar to :func:`excel_mcp.cell_validation.get_all_validation_ranges`."""
+    out: List[Dict[str, Any]] = []
+    try:
+        u = ws.UsedRange
+    except Exception:
+        return []
+    try:
+        spec = u.SpecialCells(_XL_CELLTYPE_ALL_VALIDATION)
+    except Exception:
+        return []
+    try:
+        n_areas = int(spec.Areas.Count)
+    except Exception:
+        n_areas = 1
+    for i in range(1, n_areas + 1):
+        try:
+            area = spec.Areas(i) if n_areas > 1 else spec
+            addr = str(area.Address).replace("$", "")
+            v = area.Cells(1, 1).Validation
+            vt = int(getattr(v, "Type", 0))
+            if vt == 0:
+                continue
+            type_str = _XL_DVTYPE_STR.get(vt, "custom")
+            info: Dict[str, Any] = {
+                "ranges": addr,
+                "validation_type": type_str,
+                "allow_blank": bool(getattr(v, "IgnoreBlank", True)),
+            }
+            if type_str == "list":
+                f1 = str(getattr(v, "Formula1", "") or "").lstrip("=")
+                if f1 and "," in f1 and "!" not in f1:
+                    info["allowed_values"] = [x.strip() for x in f1.split(",") if x.strip()]
+                elif f1:
+                    info["allowed_values"] = [f1]
+            else:
+                f1 = str(getattr(v, "Formula1", "") or "").lstrip("=")
+                f2 = str(getattr(v, "Formula2", "") or "").lstrip("=")
+                if f1:
+                    info["formula1"] = f1
+                if f2:
+                    info["formula2"] = f2
+            out.append(info)
+        except Exception:
+            continue
+    return out
 
 
 class ComWorkbookService:
@@ -271,8 +519,127 @@ class ComWorkbookService:
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del filepath, sheet_name, start_cell, end_cell, preview_only, operation_metadata
-        return self._stub()
+        del operation_metadata
+        return self._executor.submit(
+            self._read_range_with_metadata_com,
+            filepath,
+            sheet_name,
+            start_cell,
+            end_cell,
+            preview_only,
+        )
+
+    @staticmethod
+    def _read_range_with_metadata_com(
+        filepath: str,
+        sheet_name: str,
+        start_cell: str,
+        end_cell: Optional[str],
+        preview_only: bool,
+    ) -> str:
+        del preview_only
+        include_validation = True
+        raw_start = start_cell.strip()
+        ec: Optional[str] = end_cell
+        if ":" in raw_start and ec is None:
+            parts = raw_start.split(":", 1)
+            raw_start, ec = parts[0].strip(), parts[1].strip()
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            srow, scol, _, _ = parse_cell_range(f"{raw_start}:{raw_start}")
+        except ValueError as e:
+            return f"Error: Invalid start cell format: {str(e)}"
+
+        uminr, uminc, umaxr, umaxc = _com_used_bounds(ws)
+        if ec is None:
+            if umaxr == 1 and umaxc == 1:
+                try:
+                    a1v = ws.Range("A1").Value2
+                except Exception:
+                    a1v = None
+                if a1v is None or a1v == "":
+                    erow, ecol = srow, scol
+                else:
+                    erow, ecol = umaxr, umaxc
+                    if raw_start.upper() == "A1":
+                        srow, scol = uminr, uminc
+            else:
+                erow, ecol = umaxr, umaxc
+                if raw_start.upper() == "A1":
+                    srow, scol = uminr, uminc
+        else:
+            try:
+                et = ec.strip() if ec else ""
+                erow, ecol, _, _ = parse_cell_range(f"{et}:{et}")
+            except ValueError as e:
+                return f"Error: Invalid end cell format: {str(e)}"
+
+        if srow > umaxr or scol > umaxc:
+            return json.dumps(
+                {
+                    "range": f"{get_column_letter(scol)}{srow}:",
+                    "sheet_name": sheet_name,
+                    "cells": [],
+                },
+                indent=2,
+                default=str,
+            )
+
+        range_str = (
+            f"{get_column_letter(scol)}{srow}:{get_column_letter(ecol)}{erow}"
+        )
+        range_data: Dict[str, Any] = {
+            "range": range_str,
+            "sheet_name": sheet_name,
+            "cells": [],
+        }
+
+        nrows = erow - srow + 1
+        ncols = ecol - scol + 1
+        try:
+            top_left = ws.Cells(srow, scol)
+            rng = top_left.Resize(nrows, ncols)
+            raw_vals = rng.Value2
+        except Exception as exc:
+            return f"Error: {exc}"
+
+        matrix = _normalize_excel_matrix(raw_vals)
+        for ir in range(nrows):
+            row_vals = matrix[ir] if ir < len(matrix) else []
+            for ic in range(ncols):
+                r = srow + ir
+                c = scol + ic
+                val: Any
+                if ir < len(matrix) and ic < len(row_vals):
+                    val = row_vals[ic]
+                else:
+                    val = None
+                addr = f"{get_column_letter(c)}{r}"
+                cell_data: Dict[str, Any] = {
+                    "address": addr,
+                    "value": val,
+                    "row": r,
+                    "column": c,
+                }
+                if include_validation:
+                    vinfo = _com_validation_dict(ws, r, c, addr)
+                    if vinfo:
+                        cell_data["validation"] = vinfo
+                    else:
+                        cell_data["validation"] = {"has_validation": False}
+                range_data["cells"].append(cell_data)
+
+        if not range_data["cells"]:
+            return "No data found in specified range"
+        return json.dumps(range_data, indent=2, default=str)
 
     def workbook_metadata(
         self,
@@ -281,8 +648,18 @@ class ComWorkbookService:
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del filepath, include_ranges, operation_metadata
-        return self._stub()
+        del operation_metadata
+        return self._executor.submit(
+            self._workbook_metadata_com, filepath, include_ranges
+        )
+
+    @staticmethod
+    def _workbook_metadata_com(filepath: str, include_ranges: bool) -> str:
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        info = _com_workbook_metadata_dict(wb_com, filepath, include_ranges)
+        return str(info)
 
     def read_merged_cell_ranges(
         self,
@@ -291,8 +668,21 @@ class ComWorkbookService:
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del filepath, sheet_name, operation_metadata
-        return self._stub()
+        del operation_metadata
+        return self._executor.submit(
+            self._read_merged_cell_ranges_com, filepath, sheet_name
+        )
+
+    @staticmethod
+    def _read_merged_cell_ranges_com(filepath: str, sheet_name: str) -> str:
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+        return str(_com_sheet_merge_addresses(ws))
 
     def read_worksheet_data_validation(
         self,
@@ -301,8 +691,30 @@ class ComWorkbookService:
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del filepath, sheet_name, operation_metadata
-        return self._stub()
+        del operation_metadata
+        return self._executor.submit(
+            self._read_worksheet_data_validation_com, filepath, sheet_name
+        )
+
+    @staticmethod
+    def _read_worksheet_data_validation_com(
+        filepath: str, sheet_name: str
+    ) -> str:
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+        rules = _com_validation_rules_for_sheet(ws)
+        if not rules:
+            return "No data validation rules found in this worksheet"
+        return json.dumps(
+            {"sheet_name": sheet_name, "validation_rules": rules},
+            indent=2,
+            default=str,
+        )
 
     def validate_sheet_range(
         self,
@@ -313,8 +725,49 @@ class ComWorkbookService:
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del filepath, sheet_name, start_cell, end_cell, operation_metadata
-        return self._stub()
+        del operation_metadata
+        return self._executor.submit(
+            self._validate_sheet_range_com,
+            filepath,
+            sheet_name,
+            start_cell,
+            end_cell,
+        )
+
+    @staticmethod
+    def _validate_sheet_range_com(
+        filepath: str,
+        sheet_name: str,
+        start_cell: str,
+        end_cell: Optional[str],
+    ) -> str:
+        from openpyxl.utils import get_column_letter as gcl
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            srow, scol, erow, ecol = parse_cell_range(start_cell, end_cell)
+        except ValueError as e:
+            return f"Error: Invalid range: {str(e)}"
+        if erow is None:
+            erow = srow
+        if ecol is None:
+            ecol = scol
+
+        _uminr, _uminc, umaxr, umaxc = _com_used_bounds(ws)
+        data_max_row, data_max_col = umaxr, umaxc
+        data_range_str = f"A1:{gcl(data_max_col)}{data_max_row}"
+        range_str = start_cell if end_cell is None else f"{start_cell}:{end_cell}"
+        return (
+            f"Range '{range_str}' is valid. "
+            f"Sheet contains data in range '{data_range_str}'"
+        )
 
     def validate_formula_syntax(
         self,
@@ -325,8 +778,96 @@ class ComWorkbookService:
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del filepath, sheet_name, cell, formula, operation_metadata
-        return self._stub()
+        del operation_metadata
+        return self._executor.submit(
+            self._validate_formula_syntax_com, filepath, sheet_name, cell, formula
+        )
+
+    @staticmethod
+    def _validate_formula_syntax_com(
+        filepath: str, sheet_name: str, cell: str, formula: str
+    ) -> str:
+        from excel_mcp.validation import validate_formula
+
+        if not validate_cell_reference(cell):
+            return f"Error: Invalid cell reference: {cell}"
+        ftext = formula if formula.startswith("=") else f"={formula}"
+        is_valid, message = validate_formula(ftext)
+        if not is_valid:
+            return f"Error: Invalid formula syntax: {message}"
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            current = ws.Range(cell).Formula
+        except Exception as exc:
+            return f"Error: {exc}"
+        if isinstance(current, str) and current.startswith("="):
+            if ftext == current:
+                return "Formula is valid and matches cell content"
+            return (
+                "Formula is valid but doesn't match cell content; "
+                f"cell has {current!r}, provided {ftext!r}"
+            )
+        return (
+            "Formula is valid but cell contains no formula; "
+            f"current content: {current!r}"
+        )
+
+    def open_workbook_in_excel(self, filepath: str) -> str:
+        """``Workbooks.Open`` on the COM thread (ADR 0008 lifecycle)."""
+        return self._executor.submit(self._open_workbook_in_excel_com, filepath)
+
+    def close_workbook_in_excel(self, filepath: str, *, save: bool = False) -> str:
+        """Close a workbook in the Excel host; optional save (ADR 0008 lifecycle)."""
+        return self._executor.submit(
+            self._close_workbook_in_excel_com, filepath, save
+        )
+
+    @staticmethod
+    def _open_workbook_in_excel_com(filepath: str) -> str:
+        import win32com.client
+
+        is_url = str(filepath).lower().startswith("https://")
+        if not is_url:
+            p = os.path.abspath(os.path.expanduser(filepath))
+            if not os.path.isfile(p):
+                return f"Error: File not found: {filepath}"
+            open_arg = p
+        else:
+            open_arg = str(filepath)
+
+        try:
+            xl = win32com.client.GetActiveObject("Excel.Application")
+        except Exception:
+            try:
+                xl = win32com.client.DispatchEx("Excel.Application")
+                xl.Visible = True
+            except Exception as exc:
+                return f"Error: Cannot start or attach to Excel: {exc}"
+        try:
+            xl.Workbooks.Open(open_arg)
+        except Exception as exc:
+            return f"Error: {exc}"
+        return f"Opened workbook in Excel: {open_arg}"
+
+    @staticmethod
+    def _close_workbook_in_excel_com(filepath: str, save: bool) -> str:
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            wb_com.Close(SaveChanges=bool(save))
+        except Exception as exc:
+            return f"Error: {exc}"
+        what = "saved and closed" if save else "closed without saving"
+        return f"Workbook closed in Excel ({what}): {filepath}"
 
     def apply_formula(
         self,

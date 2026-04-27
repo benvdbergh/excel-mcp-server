@@ -52,6 +52,12 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 | **[`TOOLS.md`](TOOLS.md)** | Per-tool reference; same `filepath` and `workbook_transport` rules apply to every workbook tool |
 | **`manifest.json`** | MCP catalog metadata and `mcp_config` (`uvx excel-com-mcp stdio`) |
 | **[`.cursor/mcp.json`](.cursor/mcp.json)** | Optional Cursor workspace server using `${workspaceFolder}` + `uv run --project …` (see [Stdio Transport](#1-stdio-transport-for-local-use)) |
+| **[`CHANGELOG.md`](CHANGELOG.md)** | Version-to-version release notes and breaking changes |
+| **[`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md)** | Epic/story delivery status for workbook routing |
+
+### Upgrading from 0.2.x
+
+**Epic 11 / ADR 0008** (release **0.3.0**): **`save_after_write` is removed** from mutating tools—call **`save_workbook`** when you need disk persistence. **Read tools are COM-first** (same as writes) when `workbook_transport` is `auto` or `com` and Excel has the workbook open; for on-disk snapshots use `workbook_transport=file` on reads or save first. New **lifecycle** tools: **`excel_open_workbook`**, **`excel_close_workbook`** (Windows + COM). Details: [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), and [ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md).
 
 ---
 
@@ -225,14 +231,13 @@ These environment variables control **workbook** routing (file-backed ``openpyxl
 | ``EXCEL_MCP_TRANSPORT`` | Workbook mode: ``auto``, ``file``, or ``com`` (case-insensitive). Default ``auto`` when unset or empty. Invalid values raise at read time. Parsed by ``excel_mcp.routing.read_workbook_transport``. |
 | ``EXCEL_MCP_COM_STRICT`` | When ``1`` / ``true`` / ``yes`` (case-insensitive): strict COM policy. When ``0`` / ``false`` / ``no``, or explicitly relaxed: non-strict. **Unset or empty defaults to strict** (``True``). Parsed by ``read_com_strict``. |
 | ``EXCEL_MCP_COM_ALLOW_FILE_FALLBACK`` | When ``1`` / ``true`` / ``yes``: operators allow documented file fallback in scenarios where non-strict routing would apply (ADR 0005). Unset or empty: ``False``. Parsed by ``read_com_allow_file_fallback``. |
-| ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT`` | Default for optional tool parameter ``save_after_write`` when omitted on mutating tools. ``1`` / ``true`` / ``yes`` → default **true** (extra ``save_workbook`` after file-backed writes). **Unset or empty defaults to false** (FR-8: no extra flush until requested). Parsed by ``read_save_after_write_default``. |
 | ``EXCEL_MCP_ALLOWED_URL_PREFIXES`` | When ``EXCEL_MCP_ALLOWED_PATHS`` is set: **required** for `https` workbook locators. **Semicolon-separated** **https** URL prefixes on all OSes. See [URL prefix allowlist](#url-prefix-allowlist-for-cloud-locators-excel_mcp_allowed_url_prefixes). |
 
 **Effective strictness for the router** is ``effective_com_strict()``: ``False`` if file fallback is allowed **or** ``EXCEL_MCP_COM_STRICT`` is explicitly falsy; otherwise ``True``. Allowing file fallback forces non-strict effective behavior whenever that flag is on.
 
 ### Optional MCP tool parameters (workbook routing)
 
-Every workbook tool accepts optional **`workbook_transport`** (``auto`` \| ``file`` \| ``com``) and **`save_after_write`** (boolean). When omitted, transport defaults to ``EXCEL_MCP_TRANSPORT`` and the save flag defaults per ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT``. **Read-only tools** ignore ``save_after_write`` (no extra save). These names refer to **workbook** execution routing (ADR 0001), not MCP wire transport.
+Most workbook tools accept optional **`workbook_transport`** (``auto`` \| ``file`` \| ``com``). When omitted, transport defaults to ``EXCEL_MCP_TRANSPORT``. **Lifecycle** tools **`excel_open_workbook`** / **`excel_close_workbook`** do not use this parameter (they are COM-only per ADR 0008). For **persistence** after mutations, call **`save_workbook`** (ADR 0008). These names refer to **workbook** execution routing (ADR 0001), not MCP wire transport.
 
 ### Routing observability
 
@@ -240,16 +245,16 @@ Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel
 
 - **workbook_transport** — requested mode: ``auto``, ``file``, or ``com``.
 - **workbook_backend** — resolved backend after the selection matrix: ``file`` or ``com``.
-- **routing_reason** — stable reason string from ``RoutingBackend`` (e.g. ``forced_file``, ``read_class_file_backed``, ``full_name_match``).
+- **routing_reason** — stable reason string from ``RoutingBackend`` (e.g. ``forced_file``, ``full_name_match``, ``auto_workbook_not_open_file``, ``v1_file_forced``).
 - **duration_ms** — wall time for resolve plus executed file I/O (when applicable).
 - **workbook_path** — redacted path (basename only by default; set ``EXCEL_MCP_LOG_FULL_PATHS=1`` for full path in break-glass scenarios).
 - **operation_name** — routed contract method name (e.g. ``read_range_with_metadata``).
 - **mcp_tool_name** — optional registered MCP tool name when supplied by the caller.
 - **v1_file_forced** — `true` when **ADR 0004** forces the **file** backend for a tool (chart / pivot v1) regardless of `auto`→COM for other writes.
 
-### ADR 0003 — file-backed reads vs Excel host state
+### ADR 0008 / ADR 0003 — COM-first reads and when disk matters
 
-Read-class tools (**`read_data_from_excel`**, **`get_workbook_metadata`**, validation reads, etc.) stay **file-backed**: they read the **on-disk** workbook through openpyxl, not live Excel grid memory. If you mutate via **COM** without saving on every write, disk can lag Excel. **Agent pattern:** call **`save_workbook`** before **`read_data_from_excel`** (or other reads) when you need file reads to reflect what Excel has in memory. See [`docs/architecture/adr/0003-read-path-com-parity.md`](docs/architecture/adr/0003-read-path-com-parity.md).
+Read-class tools use the **same routing** as writes (**COM-first** when `transport=auto`/`com`, the workbook matches an open host, and COM is viable; otherwise **openpyxl** file path). Live grid reads therefore follow **Excel** when COM is selected, not necessarily the last saved file. If you rely on **on-disk** snapshots (external tools, `workbook_transport=file`), or after COM writes you need the file to match the host, call **`save_workbook`** before file-backed operations. **`create_chart`** / **`create_pivot_table`** remain **file-forced** (ADR 0004). Historical “file-default reads” (ADR 0007) are superseded; see [`docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md`](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md) and [`docs/architecture/adr/0003-read-path-com-parity.md`](docs/architecture/adr/0003-read-path-com-parity.md).
 
 ### FR-9 — Protected View, read-only, duplicate instances
 
@@ -263,7 +268,7 @@ COM operations return **clear, fail-closed** errors when Excel blocks writes (e.
 
 The server **does not** request **administrator elevation** by default (COM automation targets the user’s normal Excel session; see also the blueprint §5 “do not start Excel as admin without explicit user opt-in”).
 
-**Planning / delivery status:** workbook transport epics and stories are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md). Phases **1–6** are **done** in epic/story frontmatter (including optional `[com]`, `ComThreadExecutor`, and `ComWorkbookService` skeleton). **Epic 7** is **delivered** in code: COM write-class parity per the inventory matrix, MCP **`save_workbook`** (ADR 0003), **FR-9** actionable errors (Protected View, read-only, duplicates), and **ADR 0004** v1 **tool-forced file** routing for **`create_chart`** / **`create_pivot_table`** (see logs: `routing_reason` **`v1_file_forced`**, field **`v1_file_forced`**: `true` when applicable).
+**Planning / delivery status:** workbook transport epics and stories are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md). Phases **1–9** and **Epic 11** (COM-first reads, explicit **`save_workbook`**, lifecycle tools, docs/tests) are **delivered** per that roadmap. **Epic 7** remains the vertical slice for COM write-class parity, **`save_workbook`**, **FR-9** errors, and **ADR 0004** v1 file-forced **`create_chart`** / **`create_pivot_table`** (logs: `routing_reason` **`v1_file_forced`** when applicable).
 
 **Optional Windows COM (`[com]`):** to install pywin32 for COM-backed workbook routing, use `pip install excel-com-mcp[com]` (or the equivalent for your installer). pywin32 is distributed under the [PSF License Agreement](https://github.com/mhammond/pywin32/blob/main/LICENSE.txt) (same terms as CPython).
 
@@ -276,9 +281,9 @@ COM apartment rules require Excel automation from a **consistent thread**. The s
 - Install the optional stack: ``pip install "excel-com-mcp[com]"`` (or your package equivalent) so ``pywin32`` is available.
 - Start **Microsoft Excel** manually and open the target ``.xlsx`` using **File → Open** (a running instance with the workbook loaded is required; the server does not launch Excel).
 - Run the MCP server (e.g. stdio) on the same Windows machine with routing env vars as needed (defaults: ``EXCEL_MCP_TRANSPORT=auto`` when unset).
-- Call **``write_data_to_excel``** with an **absolute** path to that file, ``workbook_transport=com`` or ``auto``, and a small ``data`` grid; with ``auto``, the workbook must be detected as open in Excel for COM to win on **write** tools.
-- Read-class tools (e.g. ``read_data_from_excel``, ``get_workbook_metadata``) stay **file-backed** per ADR 0003 even when ``workbook_transport=com``; after COM writes, call **`save_workbook`** (or use ``save_after_write=true`` on mutating tools) before reads so on-disk content matches Excel.
-- Optional: set ``save_after_write=true`` on the write so the server persists via COM ``Save`` when the executed backend was ``com``, or via openpyxl when it was ``file``.
+- Call **``write_data_to_excel``** with an **absolute** path to that file, ``workbook_transport=com`` or ``auto``, and a small ``data`` grid; with ``auto``, the workbook must be detected as open in Excel for COM to win.
+- Optional: use **`excel_open_workbook`** (or **`create_workbook(..., open_in_excel=true)`**) so Excel has the path open for **auto**→COM routing.
+- Read tools (e.g. ``read_data_from_excel``) use the **same** COM/file matrix; after COM writes, call **`save_workbook`** if you need the **on-disk** file to match the host.
 - Confirm routing in ``excel-mcp.log``: one JSON line per dispatch with ``workbook_backend`` ``com`` and a stable ``routing_reason`` (e.g. ``full_name_match`` / ``forced_com``) for writes routed to COM.
 - For release-style sign-off, follow **[`docs/plan/transport-routing/MANUAL-WINDOWS-RC-CHECKLIST.md`](docs/plan/transport-routing/MANUAL-WINDOWS-RC-CHECKLIST.md)** (Protected View, read-only, duplicate instance, save-then-read, chart/pivot ``v1_file_forced`` rows).
 

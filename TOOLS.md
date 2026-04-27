@@ -10,7 +10,7 @@ Every workbook tool takes **`filepath`** (sometimes shown as `filename` in older
 - **`https://…` cloud workbook locator (v1)** — Allowed under **stdio** when validation passes (`parse_cloud_workbook_locator` in `excel_mcp.path_resolution`). Used for **COM** automation so the string matches Excel **`Workbook.FullName`** (often SharePoint). **Do not** pass `https` when **`EXCEL_FILES_PATH`** is set unless you use only local relative paths under the jail (cloud URLs are rejected there).
 - **Finding the right string for an open cloud file:** In Excel, **VBA Immediate** → `? ActiveWorkbook.FullName`. If the result is an `https://` URL, pass that as **`filepath`**, not only the synced folder path on disk—otherwise COM may not match and **`auto`** can try **`openpyxl`** and fail with **permission denied** while Excel has the file open.
 
-Optional **`workbook_transport`** (`auto` \| `file` \| `com`) and **`save_after_write`** apply to every workbook tool (see table below). Authentication for M365 is **Excel/Office**, not the MCP server.
+Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Lifecycle** tools `excel_open_workbook` and `excel_close_workbook` are **COM-only** and do not use the routing matrix (ADR 0008). Authentication for M365 is **Excel/Office**, not the MCP server.
 
 ## Workbook routing parameters (all tools)
 
@@ -19,7 +19,8 @@ Optional keyword arguments (when the host exposes JSON Schema for tool inputs, t
 | Parameter | Type | Default | Meaning |
 | --------- | ---- | ------- | ------- |
 | `workbook_transport` | string, optional | from `EXCEL_MCP_TRANSPORT` env (`auto` if unset) | Workbook execution mode: `auto`, `file`, or `com` (case-insensitive). **Not** the MCP wire transport (stdio/SSE/HTTP). |
-| `save_after_write` | boolean, optional | from `EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT` env (`false` if unset) | On **mutating** tools only: when `true`, the server performs an explicit `save_workbook` after the operation. **Read-only tools** accept the argument but ignore it. On the dedicated **`save_workbook`** tool, the primary operation is already a save; when `true`, the server saves a second time (idempotent). |
+
+**Persistence:** call the dedicated **`save_workbook`** tool when you need changes flushed to disk (ADR 0003 / ADR 0008).
 
 Full operator env and read-vs-disk guidance: see repository **README** (Story 7-5).
 
@@ -27,29 +28,50 @@ Full operator env and read-vs-disk guidance: see repository **README** (Story 7-
 
 ### create_workbook
 
-Creates a new Excel workbook.
+Creates a new Excel workbook (file and/or COM path per `workbook_transport`).
 
 ```python
-create_workbook(filepath: str) -> str
+create_workbook(
+    filepath: str,
+    workbook_transport: str | None = None,
+    open_in_excel: bool = False,
+) -> str
 ```
 
 - `filepath`: Path where to create workbook
-- Returns: Success message with created file path
+- `workbook_transport`: same as other tools (default from `EXCEL_MCP_TRANSPORT`)
+- `open_in_excel`: if true, after a successful create the server calls **`Workbooks.Open`** in Excel when COM is available, so `auto` routing can match the open host (ADR 0008). If COM is unavailable, a note is appended and the file is still created.
+- Returns: Success message (and optional follow-up from open-in-Excel)
+
+### excel_open_workbook
+
+Open an **existing** workbook in the Excel application (`Workbooks.Open`). Use when the file exists on disk or as a allowed `https` locator; subsequent **`workbook_transport=auto`** / **`com`** tools can use COM-first routing for that identity. **Windows + COM only.**
+
+```python
+excel_open_workbook(filepath: str) -> str
+```
+
+### excel_close_workbook
+
+Close a workbook in the Excel host. Does not delete the file. **`save`**: if true, Excel saves to the workbook path before close.
+
+```python
+excel_close_workbook(filepath: str, save: bool = False) -> str
+```
 
 ### save_workbook
 
-Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Lets agents flush host state before `read_data_from_excel` when using COM without `save_after_write` on every mutation (ADR 0003).
+Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Lets agents flush host state before `read_data_from_excel` when using COM (ADR 0003).
 
 ```python
 save_workbook(
     filepath: str,
     workbook_transport: str | None = None,
-    save_after_write: bool | None = None,
 ) -> str
 ```
 
 - `filepath`: Path to the Excel file to save
-- `workbook_transport`, `save_after_write`: same workbook routing parameters as all tools (see table above). `save_after_write=true` runs an additional save after the main save (harmless duplicate flush).
+- `workbook_transport`: same workbook routing parameter as all tools (see table above)
 - Returns: Success message (e.g. confirmation including the file path)
 
 ### create_worksheet
