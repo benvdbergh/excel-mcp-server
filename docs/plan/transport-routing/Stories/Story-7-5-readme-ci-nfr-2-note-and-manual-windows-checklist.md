@@ -8,9 +8,11 @@ depends_on:
   - STORY-7-2
   - STORY-7-3
   - STORY-7-4
+  - STORY-8-2
 traces_to:
   - path: docs/specs/PRD-excel-mcp-transport-routing.md
   - path: docs/excel-mcp-fork-com-vs-file-routing.md
+  - path: docs/architecture/ci-cd-packaging-governance.md
 slice: vertical
 invest_check:
   independent: true
@@ -25,7 +27,7 @@ acceptance_criteria:
   - Manual checklist from blueprint §7 is linked or reproduced under docs/ and executed once before RC sign-off (PRD AC5, Gate 3).
   - NFR-2 p95 routing overhead captured as benchmark note or automated timing harness where feasible.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-27"
 ---
 
 # Story-7-5: README, CI, NFR-2 note, and manual Windows checklist
@@ -46,7 +48,8 @@ See frontmatter `acceptance_criteria`.
 
 - Include **NFR-4** security note (no admin elevation by default).
 - Cross-link **IMPLEMENTATION-ROADMAP.md** from README optional—keep single source of truth for planning under `docs/plan/transport-routing/`.
+- **Default CI** and workflow layout are implemented under **[Epic-8](../Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md)** (**STORY-8-2**); this story verifies README and release narrative align with that pipeline.
 
 ## Dependencies (narrative)
 
-Depends on **STORY-7-2**, **STORY-7-3**, and **STORY-7-4** so documented behavior matches implemented edge policies, chart/pivot scope, and save tool.
+Depends on **STORY-7-2**, **STORY-7-3**, and **STORY-7-4** so documented behavior matches implemented edge policies, chart/pivot scope, and save tool. Depends on **STORY-8-2** so “default CI passes” uses the governed reusable validate workflow.

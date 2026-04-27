@@ -12,4 +12,4 @@ This folder records decisions that shape the Excel MCP workbook transport fork a
 
 **Convention:** `Status` is one of *Proposed*, *Accepted*, *Superseded* (link to replacing ADR), *Deprecated*.
 
-**Related:** [Pre-fork architecture](../pre-fork-architecture.md) · [Target architecture](../target-architecture.md) · [PRD](../../specs/PRD-excel-mcp-transport-routing.md)
+**Related:** [Pre-fork architecture](../pre-fork-architecture.md) · [Target architecture](../target-architecture.md) · [CI/CD and PyPI governance](../ci-cd-packaging-governance.md) · [Release versioning policy](../release-versioning-policy.md) · [PRD](../../specs/PRD-excel-mcp-transport-routing.md)
