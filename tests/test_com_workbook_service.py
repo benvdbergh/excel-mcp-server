@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import types
@@ -396,3 +397,60 @@ def test_write_cell_grid_surfaces_read_only_error(book_path):
         msg = svc.write_cell_grid(book_path, "Sheet1", [[1]], "A1")
 
     assert msg == "Error: Workbook is read-only in Excel; COM routing cannot modify this workbook."
+
+
+def test_list_open_workbooks_empty_collection():
+    xl = MagicMock()
+    xl.ActiveWorkbook = None
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 0
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.list_open_workbooks()
+
+    assert json.loads(raw) == {"workbooks": []}
+
+
+def test_list_open_workbooks_order_and_active_flag(tmp_path):
+    p1 = str((tmp_path / "a.xlsx").resolve())
+    p2 = str((tmp_path / "b.xlsx").resolve())
+    wb1 = MagicMock()
+    wb1.FullName = p1
+    wb1.Name = "a.xlsx"
+    wb2 = MagicMock()
+    wb2.FullName = p2
+    wb2.Name = "b.xlsx"
+
+    xl = MagicMock()
+    xl.ActiveWorkbook = wb2
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 2
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb1 if i == 1 else wb2)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.list_open_workbooks()
+
+    data = json.loads(raw)["workbooks"]
+    assert len(data) == 2
+    assert data[0]["full_name"] == p1
+    assert data[0]["name"] == "a.xlsx"
+    assert data[0]["is_active"] is False
+    assert data[1]["full_name"] == p2
+    assert data[1]["name"] == "b.xlsx"
+    assert data[1]["is_active"] is True
+
+
+def test_list_open_workbooks_no_running_excel():
+    client_mod = types.ModuleType("win32com.client")
+    client_mod.GetActiveObject = MagicMock(side_effect=RuntimeError("RPC"))
+    pkg = types.ModuleType("win32com")
+    pkg.client = client_mod
+    modules = {"win32com": pkg, "win32com.client": client_mod}
+
+    with patch.dict(sys.modules, modules, clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.list_open_workbooks()
+
+    assert msg == "Error: No running Excel application found"

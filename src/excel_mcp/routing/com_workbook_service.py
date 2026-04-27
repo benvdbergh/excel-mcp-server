@@ -881,6 +881,71 @@ class ComWorkbookService:
         what = "saved and closed" if save else "closed without saving"
         return f"Workbook closed in Excel ({what}): {filepath}"
 
+    def list_open_workbooks(self) -> str:
+        """Enumerate ``Application.Workbooks`` on the COM thread (ADR 0009).
+
+        Returns a JSON string ``{"workbooks": [...]}``. Each entry includes
+        ``full_name`` (exact COM locator), ``name``, and ``is_active``.
+        Order matches Excel's ``Workbooks`` collection indices (1 .. Count).
+        """
+        return self._executor.submit(ComWorkbookService._list_open_workbooks_com)
+
+    @staticmethod
+    def _list_open_workbooks_com() -> str:
+        """Walk ``Workbooks`` for ``GetActiveObject("Excel.Application")``."""
+        try:
+            import win32com.client
+        except ModuleNotFoundError:
+            return (
+                "Error: COM workbook automation requires Windows with "
+                "optional dependency excel-com-mcp[com] (pywin32)."
+            )
+
+        try:
+            xl = win32com.client.GetActiveObject("Excel.Application")
+        except Exception:
+            return "Error: No running Excel application found"
+
+        try:
+            wb_count = _coerce_com_count(getattr(xl.Workbooks, "Count", 0))
+        except Exception:
+            wb_count = 0
+
+        active_norm: Optional[str] = None
+        try:
+            aw = xl.ActiveWorkbook
+            if aw is not None:
+                active_norm = _workbook_fullname_norm(aw)
+        except Exception:
+            active_norm = None
+
+        entries: List[Dict[str, Any]] = []
+        for i in range(1, wb_count + 1):
+            try:
+                wb = xl.Workbooks.Item(i)
+            except Exception:
+                continue
+            try:
+                fn_raw = str(wb.FullName)
+                short_name = str(wb.Name)
+            except Exception:
+                continue
+            wb_norm = _workbook_fullname_norm(wb)
+            is_act = (
+                active_norm is not None
+                and wb_norm is not None
+                and wb_norm == active_norm
+            )
+            entries.append(
+                {
+                    "full_name": fn_raw,
+                    "name": short_name,
+                    "is_active": bool(is_act),
+                }
+            )
+
+        return json.dumps({"workbooks": entries}, ensure_ascii=False)
+
     def apply_formula(
         self,
         filepath: str,
