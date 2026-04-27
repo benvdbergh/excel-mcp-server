@@ -2,7 +2,7 @@
 
 This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **epics and stories** under `docs/plan/transport-routing/`, aligned with `docs/architecture/target-architecture.md` and ADRs `docs/architecture/adr/`.
 
-**Status (2026-04-27):** Epics **1–8** are implemented. **Epic 8** (governed CI/CD, manual packaging/publish, PyPI **excel-com-mcp** via OIDC) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7**: COM write parity, FR-9 COM guards, ADR 0004 tests/logging, `save_workbook` MCP tool, README/CI/manual checklist, NFR-2 note.
+**Status (2026-04-28):** Epics **1–9** are implemented. **Epic 9** ([cloud / SharePoint workbook locators for COM](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md)) is **delivered** (Stories 9-1, 9-2). **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap.
 
 ## Phasing (execution order)
 
@@ -16,6 +16,7 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | 6 | [Epic-6](Epics/Epic-6-com-packaging-executor-and-comworkbookservice-skeleton.md) | COM packaging, single-thread executor, `ComWorkbookService` skeleton *(delivered)* |
 | 7 | [Epic-7](Epics/Epic-7-com-write-parity-edge-policies-save-workbook-and-release-hardening.md) | COM write parity, edge policies, `save_workbook`, docs, CI, manual checklist *(delivered)* |
 | 8 | [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md) | Governed CI/CD, reusable gates, manual packaging/publish, PyPI (**`excel-com-mcp`**) *(delivered)* |
+| 9 | [Epic-9](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md) | SharePoint / `https` workbook locators for COM routing, URL allowlist, docs *(delivered)* |
 
 ## Architecture traceability
 
@@ -30,6 +31,7 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | Baseline coupling | `docs/architecture/pre-fork-architecture.md` |
 | CI/CD, PyPI, release gates | `docs/architecture/ci-cd-packaging-governance.md` |
 | Versioning and changelog | `docs/architecture/release-versioning-policy.md` |
+| Cloud workbook locators (SharePoint URLs, COM identity) | `docs/architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md` |
 
 ## Validate planning artifacts
 

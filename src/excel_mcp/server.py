@@ -39,10 +39,15 @@ from excel_mcp.routing.routing_errors import (
 )
 from excel_mcp.path_policy import (
     allowlist_enforced,
+    assert_cloud_workbook_url_allowlist,
     assert_path_allowed,
     resolved_path_is_within as _resolved_path_is_within,
 )
-from excel_mcp.path_resolution import resolve_target
+from excel_mcp.path_resolution import (
+    is_cloud_workbook_locator,
+    parse_cloud_workbook_locator,
+    resolve_target,
+)
 
 # Get project root directory path for log file path.
 # When using the stdio transmission method,
@@ -137,7 +142,16 @@ mcp = FastMCP(
     "excel-mcp",
     host=os.environ.get("FASTMCP_HOST", "0.0.0.0"),
     port=int(os.environ.get("FASTMCP_PORT", "8017")),
-    instructions="Excel MCP Server for manipulating Excel files"
+    instructions=(
+        "Excel MCP server: create/read/edit .xlsx workbooks (openpyxl; optional Windows COM). "
+        "Parameter filepath: absolute disk path, OR for COM/cloud workbooks the exact https SharePoint-style "
+        "URL that matches Excel Workbook.FullName (in VBA Immediate use ? ActiveWorkbook.FullName). "
+        "If Excel reports https but you pass only a local synced path, COM may not match. "
+        "M365 sign-in is via Excel/Office, not this server. "
+        "Optional on tools: workbook_transport (auto|file|com), save_after_write. "
+        "Env: EXCEL_MCP_TRANSPORT, EXCEL_MCP_ALLOWED_PATHS, EXCEL_MCP_ALLOWED_URL_PREFIXES (with path allowlist). "
+        "Full operator docs: repository README and TOOLS.md; local Cursor MCP: README section on uv run --project."
+    ),
 )
 
 
@@ -152,6 +166,19 @@ def get_excel_path(filename: str) -> str:
     """
     if not filename or "\x00" in filename:
         raise ValueError(f"Invalid filename: {filename}")
+
+    # Cloud workbook locators (HTTPS): avoid resolve_target / os.path.realpath (Story 9-1 / ADR 0006).
+    if is_cloud_workbook_locator(filename):
+        if EXCEL_FILES_PATH is not None:
+            raise ValueError(
+                "Cloud workbook URLs (HTTPS) are not supported when EXCEL_FILES_PATH is set "
+                "(SSE/HTTP jail). Use filesystem paths under the jail root, or run the server "
+                "without EXCEL_FILES_PATH for HTTPS workbook identity strings."
+            )
+        canonical = parse_cloud_workbook_locator(filename)
+        if allowlist_enforced():
+            assert_cloud_workbook_url_allowlist(canonical)
+        return canonical
 
     if EXCEL_FILES_PATH is None:
         if not os.path.isabs(filename):

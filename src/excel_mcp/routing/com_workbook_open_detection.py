@@ -11,7 +11,7 @@ import numbers
 from typing import Any
 
 from excel_mcp.com_executor import ComThreadExecutor
-from excel_mcp.routing.com_workbook_service import _norm_workbook_path
+from excel_mcp.path_resolution import normalize_workbook_target_for_com
 
 
 def _coerce_workbook_count(val: Any) -> int:
@@ -26,7 +26,10 @@ def _count_workbook_matches_worker(resolved_path: str) -> int:
     """Return how many ``Application.Workbooks`` entries match ``resolved_path``."""
     import win32com.client  # lazy: COM thread only
 
-    target = _norm_workbook_path(resolved_path)
+    try:
+        target = normalize_workbook_target_for_com(resolved_path)
+    except ValueError:
+        return 0
     try:
         xl = win32com.client.GetActiveObject("Excel.Application")
     except Exception:
@@ -42,7 +45,11 @@ def _count_workbook_matches_worker(resolved_path: str) -> int:
             full = str(wb.FullName)
         except Exception:
             continue
-        if _norm_workbook_path(full) == target:
+        try:
+            norm_full = normalize_workbook_target_for_com(full)
+        except ValueError:
+            continue
+        if norm_full == target:
             matches += 1
     return matches
 

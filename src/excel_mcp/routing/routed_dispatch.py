@@ -15,9 +15,17 @@ from excel_mcp.routing.routing_backend import (
 )
 from excel_mcp.routing.routing_errors import ComExecutionNotImplementedError
 from excel_mcp.routing.tool_inventory import ToolKind
+from excel_mcp.path_resolution import is_cloud_workbook_locator
 from excel_mcp.routing.workbook_operation_contract import (
     ROUTED_WORKBOOK_OPERATION_NAMES,
     RoutedWorkbookOperations,
+)
+
+# Stable user-visible error when openpyxl/file backend is selected for HTTPS locators;
+# file-based tools cannot open remote URLs.
+_FILE_BACKEND_CLOUD_LOCATOR_ERROR = (
+    "Error: The file (openpyxl) backend cannot use cloud HTTPS workbook URLs. "
+    "Open the workbook in Excel and use workbook_transport auto or com (workbook must be open in Excel for COM routing)."
 )
 
 
@@ -102,7 +110,10 @@ def execute_routed_workbook_operation(
                 result = com_operation_callable()
                 executed = "com"
         else:
-            result = operation_callable()
+            if is_cloud_workbook_locator(resolved_path):
+                result = _FILE_BACKEND_CLOUD_LOCATOR_ERROR
+            else:
+                result = operation_callable()
             executed = "file"
     finally:
         if resolution is not None:

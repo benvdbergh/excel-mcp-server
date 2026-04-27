@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "excel-local": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}",
+        "excel-com-mcp",
+        "stdio"
+      ]
+    }
+  }
+}

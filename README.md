@@ -44,6 +44,17 @@ uv run python -m twine check dist/*
 
 The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` in `pyproject.toml`). A legacy console entrypoint **`excel-mcp-server`** is also installed. Examples below use **`excel-com-mcp`** for **`uvx`** and MCP JSON so they stay aligned with `manifest.json` → `server.mcp_config` (`command` / `args`).
 
+## Operator documentation map
+
+| Artifact | Purpose |
+|----------|---------|
+| **This README** | Transports, env vars, **filepath** rules (disk vs SharePoint URL), Cursor/`uv` local MCP setup, allowlists |
+| **[`TOOLS.md`](TOOLS.md)** | Per-tool reference; same `filepath` and `workbook_transport` rules apply to every workbook tool |
+| **`manifest.json`** | MCP catalog metadata and `mcp_config` (`uvx excel-com-mcp stdio`) |
+| **[`.cursor/mcp.json`](.cursor/mcp.json)** | Optional Cursor workspace server using `${workspaceFolder}` + `uv run --project …` (see [Stdio Transport](#1-stdio-transport-for-local-use)) |
+
+---
+
 ## Usage
 
 The server supports three transport methods:
@@ -87,6 +98,8 @@ uvx excel-com-mcp stdio
 ```
 
 On Windows you can use `C:\\\\Users\\\\YOU\\\\...` instead of forward slashes. Omit `"com"` on non-Windows installs. You can add `"cwd"` with the same path as a hint for other tools, but **`--project` is what fixes `uv run`**.
+
+If Cursor logs **`Failed to spawn: excel-com-mcp`** / **`program not found`**, the client did not resolve the project for `uv run`: add **`--project`** with an absolute path to this repo (or use the workspace file [`.cursor/mcp.json`](.cursor/mcp.json), which passes `${workspaceFolder}`). Relying on **`cwd` alone is not enough** in many Cursor builds.
 
 ### 2. SSE Transport (Server-Sent Events - Deprecated)
 
@@ -146,6 +159,18 @@ You can also set the `FASTMCP_PORT` environment variable to control the port the
 
 When using the **stdio protocol**, the file path is provided with each tool call, so you do **not** need to set `EXCEL_FILES_PATH` on the server. The server will use the path sent by the client for each operation.
 
+**Workbook identity for COM (Windows):** `filepath` may be a **local absolute path** *or* a **SharePoint-style `https://` URL** that matches `Workbook.FullName` in a running Excel instance. Opening the file, Microsoft 365 sign-in, and sync are handled by **Excel / Office**; the MCP does not perform SharePoint or Graph OAuth. For **read/write via the file backend** (`openpyxl`), use a real filesystem path. When **`EXCEL_MCP_ALLOWED_PATHS`** is enabled, `https` locators also require **`EXCEL_MCP_ALLOWED_URL_PREFIXES`** (see below).
+
+#### SharePoint / Microsoft 365: use the same string as Excel’s `FullName`
+
+Excel often reports cloud-backed workbooks with an **`https://…sharepoint.com/…`** identity even when a synced copy exists on disk. The MCP compares your `filepath` to COM `Workbook.FullName` **after normalization** (ADR [0006](docs/architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md)). If they differ, routing fails (`Workbook not open…`), and **`auto`** may fall back to the **file** backend and hit **`Permission denied`** while Excel holds the file.
+
+1. In Excel: **Alt+F11** → **Immediate** window → run: `? ActiveWorkbook.FullName` and press Enter.
+2. Use that **exact** returned string (including `https://`) as **`filepath`** on tools.
+3. Prefer **`workbook_transport=com`** (or **`auto`** once the identity matches and open detection can see the workbook) for edits in the Excel session.
+
+Use the **local absolute path** only when `FullName` is a normal file path, or when you intentionally use the **file** backend (e.g. headless `openpyxl`).
+
 ### Path normalization (`resolve_target`)
 
 Internally, workbook targets are normalized with **`resolve_target`** in `excel_mcp.path_resolution` (single entry point for **FR-1** / future COM path comparison). It uses `os.path.realpath` for stable absolute paths; relative resolution order (`search_roots`, then `cwd`) is documented in that module.
@@ -181,6 +206,16 @@ uvx excel-com-mcp stdio
 EXCEL_MCP_ALLOWED_PATHS=/var/excel-in:/var/excel-out uvx excel-com-mcp stdio
 ```
 
+### URL prefix allowlist for cloud locators (`EXCEL_MCP_ALLOWED_URL_PREFIXES`)
+
+When **`EXCEL_MCP_ALLOWED_PATHS`** is set (path allowlist **on**), **`https://` cloud workbook locators** must also match at least one entry in **`EXCEL_MCP_ALLOWED_URL_PREFIXES`**, or they are rejected (fail-closed). This is separate from directory containment: filesystem roots do not authorize arbitrary SharePoint URLs.
+
+- Segments are separated with **`os.pathsep`** (semicolon on Windows, colon on POSIX), same as `EXCEL_MCP_ALLOWED_PATHS`.
+- Each segment is a **prefix URL** (scheme `https`, host, and optional path) after the same canonicalization as workbook URLs. Prefer a **trailing slash** on path prefixes (e.g. `https://contoso.sharepoint.com/sites/Team/`) so only that hierarchy is allowed.
+- If the path allowlist is on but this variable is missing, empty, or has no valid `https` entries, **https workbook targets are denied**.
+
+When the path allowlist is **off**, `https` locators are accepted without `EXCEL_MCP_ALLOWED_URL_PREFIXES` (subject to normal `https` validation in `get_excel_path`).
+
 ### Workbook transport and COM policy (not MCP wire transport)
 
 These environment variables control **workbook** routing (file-backed ``openpyxl`` path vs COM automation when wired in later stories). They do **not** select the MCP client↔server **wire** transport (stdio, SSE, or streamable HTTP); that is configured by how you launch the server (see above). See ADR 0001 for the vocabulary split.
@@ -191,6 +226,7 @@ These environment variables control **workbook** routing (file-backed ``openpyxl
 | ``EXCEL_MCP_COM_STRICT`` | When ``1`` / ``true`` / ``yes`` (case-insensitive): strict COM policy. When ``0`` / ``false`` / ``no``, or explicitly relaxed: non-strict. **Unset or empty defaults to strict** (``True``). Parsed by ``read_com_strict``. |
 | ``EXCEL_MCP_COM_ALLOW_FILE_FALLBACK`` | When ``1`` / ``true`` / ``yes``: operators allow documented file fallback in scenarios where non-strict routing would apply (ADR 0005). Unset or empty: ``False``. Parsed by ``read_com_allow_file_fallback``. |
 | ``EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT`` | Default for optional tool parameter ``save_after_write`` when omitted on mutating tools. ``1`` / ``true`` / ``yes`` → default **true** (extra ``save_workbook`` after file-backed writes). **Unset or empty defaults to false** (FR-8: no extra flush until requested). Parsed by ``read_save_after_write_default``. |
+| ``EXCEL_MCP_ALLOWED_URL_PREFIXES`` | When ``EXCEL_MCP_ALLOWED_PATHS`` is set: **required** for `https` workbook locators. Semicolon/colon-separated (``os.pathsep``) **https** URL prefixes. See [URL prefix allowlist](#url-prefix-allowlist-for-cloud-locators-excel_mcp_allowed_url_prefixes). |
 
 **Effective strictness for the router** is ``effective_com_strict()``: ``False`` if file fallback is allowed **or** ``EXCEL_MCP_COM_STRICT`` is explicitly falsy; otherwise ``True``. Allowing file fallback forces non-strict effective behavior whenever that flag is on.
 

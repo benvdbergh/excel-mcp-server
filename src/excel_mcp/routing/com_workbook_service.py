@@ -12,8 +12,10 @@ import os
 import re
 import uuid
 from typing import Any, Dict, List, Mapping, Optional, Tuple
+from urllib.parse import urljoin
 
 from excel_mcp.com_executor import ComThreadExecutor
+from excel_mcp.path_resolution import normalize_workbook_target_for_com
 
 _COM_NOT_IMPLEMENTED = "Error: COM path not implemented for this operation yet"
 
@@ -87,7 +89,7 @@ def _com_bool_is_true(val: Any) -> bool:
 
 def _workbook_fullname_norm(wb: Any) -> Optional[str]:
     try:
-        return _norm_workbook_path(str(wb.FullName))
+        return normalize_workbook_target_for_com(str(wb.FullName))
     except Exception:
         return None
 
@@ -105,9 +107,19 @@ def _protected_view_candidate_paths(pv: Any) -> list[str]:
     try:
         sp, sn = str(pv.SourcePath), str(pv.SourceName)
         if sp and sn:
-            out.append(_norm_workbook_path(os.path.join(sp, sn)))
+            sps = sp.strip()
+            if sps.lower().startswith("https://"):
+                base = sp if sp.endswith("/") else sp + "/"
+                combined = urljoin(
+                    base, str(sn).replace("\\", "/").lstrip("/")
+                )
+                out.append(normalize_workbook_target_for_com(combined))
+            else:
+                out.append(
+                    normalize_workbook_target_for_com(os.path.join(sp, sn))
+                )
         elif sp:
-            out.append(_norm_workbook_path(sp))
+            out.append(normalize_workbook_target_for_com(sp))
     except Exception:
         pass
     return out
@@ -209,7 +221,7 @@ class ComWorkbookService:
         """
         import win32com.client  # lazy: worker thread only
 
-        target = _norm_workbook_path(filepath)
+        target = normalize_workbook_target_for_com(filepath)
         try:
             xl = win32com.client.GetActiveObject("Excel.Application")
         except Exception:

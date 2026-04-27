@@ -24,11 +24,28 @@ inactive, behavior is jail-only (unchanged).
 Invalid or unreadable root entries are skipped; if none remain, the allowlist
 is effectively **on** with **no** roots and all paths fail the allowlist check
 (fail-closed).
+
+``EXCEL_MCP_ALLOWED_URL_PREFIXES``
+-----------------------------------
+Used only when **``EXCEL_MCP_ALLOWED_PATHS``** is active (filesystem allowlist
+enforced). HTTPS **cloud workbook locators** (SharePoint-style URLs) must then
+match at least one allowed URL prefix after canonicalization (ADR 0006 /
+Story 9-2).
+
+Segments use **``os.pathsep``** like ``EXCEL_MCP_ALLOWED_PATHS``. Each non-empty
+segment is trimmed and normalized with the same rules as cloud workbook URLs
+(``parse_cloud_workbook_locator``). Invalid segments are skipped.
+
+When the path allowlist is on but this variable is unset, empty, or yields no
+valid prefixes, **https workbook locators** are rejected (fail-closed). Disk
+paths continue to use ``EXCEL_MCP_ALLOWED_PATHS`` only.
 """
 
 from __future__ import annotations
 
 import os
+
+from excel_mcp.path_resolution import is_cloud_workbook_locator, parse_cloud_workbook_locator
 
 
 def resolved_path_is_within(base: str, candidate: str) -> bool:
@@ -124,3 +141,76 @@ def assert_path_allowed(resolved: str, *, jail_realpath: str | None = None) -> N
             "EXCEL_MCP_ALLOWED_PATHS"
         )
     raise ValueError(f"Invalid path: {resolved!r}")
+
+
+def _url_allowlist_prefixes_canonical() -> tuple[str, ...] | None:
+    """``None`` if env unset/blank; else ``tuple`` of canonical https prefixes (possibly empty)."""
+    raw = os.environ.get("EXCEL_MCP_ALLOWED_URL_PREFIXES")
+    if raw is None or not raw.strip():
+        return None
+    parts = [p.strip() for p in raw.split(os.pathsep) if p.strip()]
+    if not parts:
+        return None
+    out: list[str] = []
+    for p in parts:
+        if not is_cloud_workbook_locator(p):
+            continue
+        try:
+            out.append(parse_cloud_workbook_locator(p))
+        except ValueError:
+            continue
+    return tuple(out)
+
+
+def _canonical_url_matches_prefix(canonical_url: str, prefix: str) -> bool:
+    """True if ``canonical_url`` is the prefix or continues under it with a path/query boundary."""
+    if not canonical_url.startswith(prefix):
+        return False
+    if len(canonical_url) == len(prefix):
+        return True
+    if prefix.endswith("/"):
+        return True
+    rest = canonical_url[len(prefix) :]
+    # Reject prefix …/site matching …/siteOther
+    return rest.startswith("/") or rest.startswith("?") or rest.startswith("#")
+
+
+def cloud_workbook_url_allowed_by_prefix_list(canonical_https_url: str) -> bool:
+    """Return whether ``canonical_https_url`` matches at least one configured URL prefix.
+
+    ``canonical_https_url`` must already be the output of
+    :func:`~excel_mcp.path_resolution.parse_cloud_workbook_locator`.
+    """
+    prefixes = _url_allowlist_prefixes_canonical()
+    if prefixes is None:
+        return False
+    if not prefixes:
+        return False
+    for pref in prefixes:
+        if _canonical_url_matches_prefix(canonical_https_url, pref):
+            return True
+    return False
+
+
+def assert_cloud_workbook_url_allowlist(canonical_https_url: str) -> None:
+    """When :func:`allowlist_enforced` is true, require URL prefix allowlist for https targets.
+
+    Args:
+        canonical_https_url: Output of :func:`~excel_mcp.path_resolution.parse_cloud_workbook_locator`.
+
+    Raises:
+        ValueError: No usable ``EXCEL_MCP_ALLOWED_URL_PREFIXES``, or URL not under an allowed prefix.
+    """
+    if not allowlist_enforced():
+        return
+    prefixes = _url_allowlist_prefixes_canonical()
+    if prefixes is None or not prefixes:
+        raise ValueError(
+            "When EXCEL_MCP_ALLOWED_PATHS is set, cloud workbook URLs require "
+            "EXCEL_MCP_ALLOWED_URL_PREFIXES with at least one valid https prefix."
+        )
+    if not cloud_workbook_url_allowed_by_prefix_list(canonical_https_url):
+        raise ValueError(
+            f"Invalid cloud workbook locator: {canonical_https_url!r} is not under any prefix in "
+            "EXCEL_MCP_ALLOWED_URL_PREFIXES"
+        )

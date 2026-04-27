@@ -1,6 +1,16 @@
 # Excel MCP Server Tools
 
-This document provides detailed information about all available tools in the Excel MCP server.
+This document provides detailed information about all available tools in the Excel MCP server. For **install, transports, env vars, and allowlists**, see the repository **README**. The **MCP client** also receives a short **server `instructions`** string (see `FastMCP` in `src/excel_mcp/server.py`) summarizing `filepath` rules and where to read more.
+
+## `filepath`: disk path, SharePoint URL, and COM matching
+
+Every workbook tool takes **`filepath`** (sometimes shown as `filename` in older docs). The server resolves it through **`get_excel_path`** (`src/excel_mcp/server.py`):
+
+- **Absolute local path** — Normal file identity; `resolve_target` / `realpath` apply when the path allowlist is on (see README).
+- **`https://…` cloud workbook locator (v1)** — Allowed under **stdio** when validation passes (`parse_cloud_workbook_locator` in `excel_mcp.path_resolution`). Used for **COM** automation so the string matches Excel **`Workbook.FullName`** (often SharePoint). **Do not** pass `https` when **`EXCEL_FILES_PATH`** is set unless you use only local relative paths under the jail (cloud URLs are rejected there).
+- **Finding the right string for an open cloud file:** In Excel, **VBA Immediate** → `? ActiveWorkbook.FullName`. If the result is an `https://` URL, pass that as **`filepath`**, not only the synced folder path on disk—otherwise COM may not match and **`auto`** can try **`openpyxl`** and fail with **permission denied** while Excel has the file open.
+
+Optional **`workbook_transport`** (`auto` \| `file` \| `com`) and **`save_after_write`** apply to every workbook tool (see table below). Authentication for M365 is **Excel/Office**, not the MCP server.
 
 ## Workbook routing parameters (all tools)
 
@@ -76,14 +86,14 @@ Write data to Excel worksheet.
 write_data_to_excel(
     filepath: str,
     sheet_name: str,
-    data: List[Dict],
+    data: List[List],
     start_cell: str = "A1"
 ) -> str
 ```
 
-- `filepath`: Path to Excel file
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top of this file)
 - `sheet_name`: Target worksheet name
-- `data`: List of dictionaries containing data to write
+- `data`: List of rows, each row a list of cell values (see server implementation)
 - `start_cell`: Starting cell (default: "A1")
 - Returns: Success message
 

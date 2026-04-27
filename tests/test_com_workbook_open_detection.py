@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from excel_mcp.path_resolution import normalize_workbook_target_for_com
 from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 
 
@@ -79,6 +80,25 @@ def test_two_matching_workbooks_false(book_path):
     with patch.dict(sys.modules, _fake_win32(xl), clear=False):
         port = ComWorkbookOpenInExcel(ImmediateExecutor())
         assert port.is_workbook_open_in_excel(book_path) is False
+
+
+def test_https_workbook_operator_and_excel_fullname_equivalent(book_path, tmp_path):
+    """Excel may report FullName with different host case or spacing vs operator locator."""
+    del book_path, tmp_path
+    u_op = "HTTPS://tenant.SharePoint.com/sites/s/Shared%20Documents/book.xlsx"
+    u_excel = "https://tenant.sharepoint.com/sites/s/Shared Documents/book.xlsx"
+    assert normalize_workbook_target_for_com(u_op) == normalize_workbook_target_for_com(u_excel)
+
+    wb = MagicMock()
+    wb.FullName = u_excel
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32(xl), clear=False):
+        port = ComWorkbookOpenInExcel(ImmediateExecutor())
+        assert port.is_workbook_open_in_excel(u_op) is True
 
 
 def test_one_other_path_false(book_path, tmp_path):
