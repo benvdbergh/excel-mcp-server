@@ -9,6 +9,8 @@ depends_on:
 traces_to:
   - path: docs/architecture/ci-cd-packaging-governance.md
   - path: docs/architecture/release-versioning-policy.md
+  - path: README.md
+  - path: manifest.json
 slice: vertical
 invest_check:
   independent: true
@@ -22,6 +24,7 @@ acceptance_criteria:
   - "Only the publish job sets `id-token: write`; publish uses pinned Python consistent with CI."
   - "Existing `publish.yml` on `release: published` either invokes the same reusable validation before publish or is replaced by a pattern documented in governance §3."
   - "Release versioning doc §5 (automation options) references which triggers are active after merge."
+  - "README documents no-install MCP wiring for agentic hosts (e.g. Cursor, Claude Code, comparable MCP clients) using the published distribution identity: commands and JSON examples use the same package name as `pyproject.toml` `[project].name` and the stdio entrypoint; `manifest.json` `server.mcp_config` matches that command/args for registry-oriented installs."
 created: "2026-04-27"
 updated: "2026-04-27"
 ---
@@ -42,6 +45,7 @@ See frontmatter `acceptance_criteria`.
 
 ## Technical notes
 
+- This closes the loop from **PyPI artifact** to **documented consumer config** so “publish succeeded” implies operators can copy from README (and optional manifest) without name drift after a fork/rename.
 - Coordinate **GitHub Environment** name (`release` / `pypi`) with PyPI **trusted publisher** settings.
 - **STORY-8-3** is optional before this story; publish can rebuild from ref. Prefer validate → build → publish in one workflow if artifact reuse is not required for v1.
 

@@ -14,6 +14,7 @@ acceptance_criteria:
   - Manual release packaging produces versioned sdist/wheel artifacts with configurable retention.
   - Manual PyPI publish path exists with least-privilege permissions and optional alignment to GitHub Release publish via shared reusable gates.
   - Operator can follow governance docs to configure branch protection check names and PyPI trusted publishing.
+  - Documentation allows configuring the MCP from a PyPI-based no-install pattern (e.g. `uvx` + distribution name) in agentic clients; README and `manifest.json` stay aligned with `[project].name` (see Story-8-4).
 created: "2026-04-27"
 updated: "2026-04-27"
 ---
