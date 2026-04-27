@@ -12,6 +12,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "twine>=6.0",
+    "hatch>=1.13",
+]
 com = [
     "pywin32>=307",
 ]

@@ -17,7 +17,7 @@ from excel_mcp.routing.routing_backend import (  # noqa: E402
     WorkbookBackendResolution,
 )
 from excel_mcp.routing.routing_errors import ComRoutingError  # noqa: E402
-from excel_mcp.routing.tool_inventory import ToolKind  # noqa: E402
+from excel_mcp.routing.tool_inventory import ToolKind, get_tool_kind  # noqa: E402
 
 
 class _FakeWorkbookOpen:
@@ -151,7 +151,19 @@ def test_com_non_strict_fallback_when_unavailable() -> None:
     assert r.reason == "com_unavailable_file_fallback"
 
 
-def test_v1_file_forced_overrides_auto_com() -> None:
+@pytest.mark.parametrize(
+    "tool_kind",
+    [
+        ToolKind.V1_FILE_FORCED,
+        get_tool_kind("create_chart"),
+        get_tool_kind("create_pivot_table"),
+    ],
+    ids=["v1_file_forced_enum", "create_chart_inventory", "create_pivot_table_inventory"],
+)
+def test_adr0004_v1_file_forced_auto_open_com_viable_stays_file(
+    tool_kind: ToolKind,
+) -> None:
+    """ADR 0004: chart/pivot must not drift to COM when auto + open + COM viable."""
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset({_PATH})),
         com_execution_available=True,
@@ -160,11 +172,14 @@ def test_v1_file_forced_overrides_auto_com() -> None:
     r = rb.resolve_workbook_backend(
         resolved_path=_PATH,
         transport="auto",
-        tool_kind=ToolKind.V1_FILE_FORCED,
+        tool_kind=tool_kind,
         com_strict=False,
     )
-    assert r.backend == "file"
-    assert r.reason == "v1_file_forced"
+    assert r == WorkbookBackendResolution(
+        backend="file",
+        reason="v1_file_forced",
+        requested_transport="auto",
+    )
 
 
 def test_v1_file_forced_as_string() -> None:
@@ -231,24 +246,24 @@ def test_com_transport_forced_com_when_viable_and_open() -> None:
     assert r.reason == "forced_com"
 
 
-def test_com_strict_workbook_not_open_when_execution_available() -> None:
+def test_com_transport_forced_com_when_viable_even_if_not_open() -> None:
+    """Explicit ``transport=com`` selects COM whenever viable (open port ignored)."""
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset()),
         com_execution_available=True,
         runtime_platform="win32",
     )
-    with pytest.raises(ComRoutingError) as excinfo:
-        rb.resolve_workbook_backend(
-            resolved_path=_PATH,
-            transport="com",
-            tool_kind=ToolKind.WRITE,
-            com_strict=True,
-        )
-    assert ComRoutingError.STABLE_TOKEN in str(excinfo.value)
-    assert excinfo.value.reason_code == "com_workbook_not_open"
+    r = rb.resolve_workbook_backend(
+        resolved_path=_PATH,
+        transport="com",
+        tool_kind=ToolKind.WRITE,
+        com_strict=True,
+    )
+    assert r.backend == "com"
+    assert r.reason == "forced_com"
 
 
-def test_com_non_strict_workbook_not_open_fallback() -> None:
+def test_com_non_strict_still_com_when_viable_not_open() -> None:
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset()),
         com_execution_available=True,
@@ -260,8 +275,8 @@ def test_com_non_strict_workbook_not_open_fallback() -> None:
         tool_kind=ToolKind.WRITE,
         com_strict=False,
     )
-    assert r.backend == "file"
-    assert r.reason == "com_workbook_not_open_file_fallback"
+    assert r.backend == "com"
+    assert r.reason == "forced_com"
 
 
 def test_routing_package_exports_routing_backend_symbols() -> None:

@@ -6,7 +6,7 @@ This document describes how to evolve a **fork** of the Cursor **`user-excel`**-
 
 **Non-goals (initial fork):** macOS Excel COM parity (different story), driving **LibreOffice** via UNO, or replacing Graph API / SharePoint-only workflows.
 
-**Implementation status (2026-04-27):** Phases through **Epic 6** are implemented in this fork (router, env, MCP tool wiring, optional `[com]` packaging, single-thread COM executor, `ComWorkbookService` vertical slice, routed COM execution when pywin32 is available). See [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](plan/transport-routing/IMPLEMENTATION-ROADMAP.md) and the PRD *Engineering progress* section. **Epic 7** (write parity, explicit `save_workbook` tool, release hardening) remains planned.
+**Implementation status (2026-04-27):** Phases through **Epic 6** are implemented in this fork (router, env, MCP tool wiring, optional `[com]` packaging, single-thread COM executor, `ComWorkbookService` vertical slice, routed COM execution when pywin32 is available). **Epic 7** is implemented: COM write-class parity, explicit **`save_workbook`**, FR-9 edge errors, ADR 0004 chart/pivot **v1 file-forced** routing, and governed PR CI (reusable validate + `twine check`). See [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](plan/transport-routing/IMPLEMENTATION-ROADMAP.md) and the PRD *Engineering progress* section.
 
 ---
 

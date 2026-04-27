@@ -25,6 +25,7 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "read_data_from_excel",
         "write_data_to_excel",
         "create_workbook",
+        "save_workbook",
         "create_worksheet",
         "create_chart",
         "create_pivot_table",
@@ -50,8 +51,8 @@ _EXPECTED_TOOL_NAMES = frozenset(
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-def test_inventory_has_exactly_25_keys() -> None:
-    assert len(MCP_TOOL_INVENTORY) == 25
+def test_inventory_has_exactly_26_keys() -> None:
+    assert len(MCP_TOOL_INVENTORY) == 26
 
 
 def test_every_key_matches_expected_set_or_pattern() -> None:

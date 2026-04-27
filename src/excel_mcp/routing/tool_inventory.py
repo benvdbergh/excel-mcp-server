@@ -45,6 +45,10 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
     "read_data_from_excel": ToolInventoryEntry(ToolKind.READ),
     "write_data_to_excel": ToolInventoryEntry(ToolKind.WRITE),
     "create_workbook": ToolInventoryEntry(ToolKind.WRITE),
+    "save_workbook": ToolInventoryEntry(
+        ToolKind.WRITE,
+        notes="ADR 0003: explicit persist before file reads when using COM without per-write save.",
+    ),
     "create_worksheet": ToolInventoryEntry(ToolKind.WRITE),
     "create_chart": ToolInventoryEntry(
         ToolKind.V1_FILE_FORCED,

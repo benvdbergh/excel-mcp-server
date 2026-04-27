@@ -4,6 +4,12 @@ Callers submit callables that run on one dedicated worker thread and **block**
 until completion. This module is COM-agnostic: it does not import win32com or
 start Excel (FR-10).
 
+**COM (Windows):** The worker thread calls ``pythoncom.CoInitialize()`` once
+before processing work and ``pythoncom.CoUninitialize()`` on exit. Without this,
+``GetActiveObject("Excel.Application")`` and other COM calls from this **non-main**
+thread typically fail even when Excel is running (scripts that run on the main
+thread do not hit this).
+
 **Limitations**
 
 - **Shutdown:** ``shutdown(wait=True)`` drains the queue and joins the worker;
@@ -17,6 +23,7 @@ start Excel (FR-10).
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 from typing import Any, Callable, TypeVar
 
@@ -68,15 +75,34 @@ class ComThreadExecutor:
         return out["result"]
 
     def _worker_loop(self) -> None:
-        while True:
-            item = self._q.get()
+        com_coinit = False
+        if sys.platform == "win32":
             try:
-                if item is _SENTINEL:
-                    break
-                assert callable(item)
-                item()
-            finally:
-                self._q.task_done()
+                import pythoncom
+
+                pythoncom.CoInitialize()
+                com_coinit = True
+            except Exception:
+                # pywin32 absent or CoInitialize failed; COM callables will surface errors.
+                pass
+        try:
+            while True:
+                item = self._q.get()
+                try:
+                    if item is _SENTINEL:
+                        break
+                    assert callable(item)
+                    item()
+                finally:
+                    self._q.task_done()
+        finally:
+            if com_coinit:
+                try:
+                    import pythoncom
+
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
 
     def shutdown(self, *, wait: bool = True) -> None:
         """Stop accepting new work; optionally join the worker after it drains.

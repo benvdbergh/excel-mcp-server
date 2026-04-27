@@ -1,7 +1,9 @@
 """Port for detecting whether a workbook path is open in Excel (FR-2).
 
-Epic 6 may supply a COM-backed implementation that compares ``resolved_path``
-to Excel's open workbooks. The default stub never starts Excel (FR-10).
+When the COM stack is available, :mod:`excel_mcp.server` wires
+:class:`excel_mcp.routing.com_workbook_open_detection.ComWorkbookOpenInExcel`
+(executor-backed enumeration). Otherwise :class:`StubWorkbookOpenInExcel` is used;
+it never starts Excel (FR-10).
 """
 
 from __future__ import annotations
@@ -23,9 +25,8 @@ class WorkbookOpenInExcelPort(Protocol):
 
 
 class StubWorkbookOpenInExcel:
-    """Default port implementation: never reports a workbook as open in Excel.
+    """Port implementation used when COM is unavailable: never reports open.
 
-    Always returns ``False`` on every OS until a real COM detector exists (Epic 6).
     Does not start Excel, spawn subprocesses, or import COM bindings.
     """
 

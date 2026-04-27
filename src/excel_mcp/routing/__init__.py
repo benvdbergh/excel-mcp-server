@@ -6,6 +6,7 @@ from excel_mcp.routing.tool_inventory import (
     ToolKind,
     get_tool_kind,
 )
+from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 from excel_mcp.routing.com_workbook_service import ComWorkbookService
 from excel_mcp.routing.file_workbook_service import FileWorkbookService
 from excel_mcp.routing.mcp_contract_bridge import contract_operation_name_for_mcp_tool
@@ -48,6 +49,7 @@ from excel_mcp.routing.workbook_operation_contract import (
 __all__ = [
     "ComExecutionNotImplementedError",
     "ComRoutingError",
+    "ComWorkbookOpenInExcel",
     "EXCEL_MCP_COM_ALLOW_FILE_FALLBACK",
     "EXCEL_MCP_COM_STRICT",
     "EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT",

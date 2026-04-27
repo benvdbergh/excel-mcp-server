@@ -31,3 +31,4 @@ The implemented choice is reflected in:
 
 - License and distribution notes belong in README / NOTICE if required by the chosen stack.
 - All COM entry points stay behind import guards and `[com]` so Linux CI remains unaffected.
+- Callers on **non-main threads** must follow Win32 COM rules: the dedicated COM worker initializes the apartment (`pythoncom.CoInitialize()` in `ComThreadExecutor`) so pywin32 calls match the single-thread design in target architecture §7.

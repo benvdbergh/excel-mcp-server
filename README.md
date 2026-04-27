@@ -44,6 +44,29 @@ uvx excel-mcp-server stdio
 }
 ```
 
+**Local clone in Cursor (this repo):** MCP often starts `uv` with **no project working directory**, so `uv run --extra com …` fails with *“`--extra com` has no effect when used outside of a project`* and *`program not found`*. Pass the project explicitly with **`--project`** (absolute path to the folder that contains `pyproject.toml`):
+
+```json
+{
+   "mcpServers": {
+      "excel-mcp-local": {
+         "command": "uv",
+         "args": [
+            "run",
+            "--project",
+            "C:/Users/YOU/mcp/excel-mcp-server",
+            "--extra",
+            "com",
+            "excel-mcp-server",
+            "stdio"
+         ]
+      }
+   }
+}
+```
+
+On Windows you can use `C:\\\\Users\\\\YOU\\\\...` instead of forward slashes. Omit `"com"` on non-Windows installs. You can add `"cwd"` with the same path as a hint for other tools, but **`--project` is what fixes `uv run`**.
+
 ### 2. SSE Transport (Server-Sent Events - Deprecated)
 
 ```bash
@@ -165,14 +188,31 @@ Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel
 - **workbook_path** — redacted path (basename only by default; set ``EXCEL_MCP_LOG_FULL_PATHS=1`` for full path in break-glass scenarios).
 - **operation_name** — routed contract method name (e.g. ``read_range_with_metadata``).
 - **mcp_tool_name** — optional registered MCP tool name when supplied by the caller.
+- **v1_file_forced** — `true` when **ADR 0004** forces the **file** backend for a tool (chart / pivot v1) regardless of `auto`→COM for other writes.
 
-**Planning / delivery status:** workbook transport epics and stories are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md). Phases **1–6** are **done** in epic/story frontmatter (including optional `[com]`, `ComThreadExecutor`, and `ComWorkbookService` skeleton). **Epic 7** (COM write parity, `save_workbook` MCP tool, release hardening) remains **draft**.
+### ADR 0003 — file-backed reads vs Excel host state
+
+Read-class tools (**`read_data_from_excel`**, **`get_workbook_metadata`**, validation reads, etc.) stay **file-backed**: they read the **on-disk** workbook through openpyxl, not live Excel grid memory. If you mutate via **COM** without saving on every write, disk can lag Excel. **Agent pattern:** call **`save_workbook`** before **`read_data_from_excel`** (or other reads) when you need file reads to reflect what Excel has in memory. See [`docs/architecture/adr/0003-read-path-com-parity.md`](docs/architecture/adr/0003-read-path-com-parity.md).
+
+### FR-9 — Protected View, read-only, duplicate instances
+
+COM operations return **clear, fail-closed** errors when Excel blocks writes (e.g. **Protected View**, **read-only**). If **multiple open workbooks** resolve to the **same path** across Excel instances, routing fails closed with an error asking the operator to **close duplicates** or use a **single** Excel instance.
+
+### NFR-2 — routing latency
+
+**p95 routing overhead** is **not** continuously benchmarked in CI. See [`docs/performance/routing-nfr2-note.md`](docs/performance/routing-nfr2-note.md) for an honest scope note and an optional local micro-benchmark idea.
+
+### NFR-4 — elevation
+
+The server **does not** request **administrator elevation** by default (COM automation targets the user’s normal Excel session; see also the blueprint §5 “do not start Excel as admin without explicit user opt-in”).
+
+**Planning / delivery status:** workbook transport epics and stories are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md). Phases **1–6** are **done** in epic/story frontmatter (including optional `[com]`, `ComThreadExecutor`, and `ComWorkbookService` skeleton). **Epic 7** is **delivered** in code: COM write-class parity per the inventory matrix, MCP **`save_workbook`** (ADR 0003), **FR-9** actionable errors (Protected View, read-only, duplicates), and **ADR 0004** v1 **tool-forced file** routing for **`create_chart`** / **`create_pivot_table`** (see logs: `routing_reason` **`v1_file_forced`**, field **`v1_file_forced`**: `true` when applicable).
 
 **Optional Windows COM (`[com]`):** to install pywin32 for COM-backed workbook routing, use `pip install excel-mcp-server[com]` (or the equivalent for your installer). pywin32 is distributed under the [PSF License Agreement](https://github.com/mhammond/pywin32/blob/main/LICENSE.txt) (same terms as CPython).
 
 ### COM execution threading (Windows)
 
-COM apartment rules require Excel automation from a **consistent thread**. The server uses ``excel_mcp.com_executor.ComThreadExecutor``: a **single worker thread** pulls jobs from a queue; ``submit(fn, *args, **kwargs)`` runs ``fn`` on that thread and **blocks** the caller until the result is ready (or an exception is propagated), so synchronous MCP tool handlers stay compatible without turning every tool ``async``. The executor does **not** start Excel by itself. For tests or clean process teardown, call ``shutdown(wait=True)``; abrupt exit may still cut off in-flight work—see the module docstring on ``com_executor`` for limitations (including no reentrant ``submit`` from inside a job on the worker).
+COM apartment rules require Excel automation from a **consistent thread**. The server uses ``excel_mcp.com_executor.ComThreadExecutor``: a **single worker thread** pulls jobs from a queue; ``submit(fn, *args, **kwargs)`` runs ``fn`` on that thread and **blocks** the caller until the result is ready (or an exception is propagated), so synchronous MCP tool handlers stay compatible without turning every tool ``async``. On Windows, that worker thread calls ``pythoncom.CoInitialize()`` before processing jobs and ``CoUninitialize()`` on shutdown so COM APIs such as ``GetActiveObject("Excel.Application")`` behave like a normal main-thread script (without this, automation from a plain background thread often fails even when Excel is running). The executor does **not** start Excel by itself. For tests or clean process teardown, call ``shutdown(wait=True)``; abrupt exit may still cut off in-flight work—see the module docstring on ``com_executor`` for limitations (including no reentrant ``submit`` from inside a job on the worker).
 
 ### Windows manual smoke (COM write path)
 
@@ -180,9 +220,24 @@ COM apartment rules require Excel automation from a **consistent thread**. The s
 - Start **Microsoft Excel** manually and open the target ``.xlsx`` using **File → Open** (a running instance with the workbook loaded is required; the server does not launch Excel).
 - Run the MCP server (e.g. stdio) on the same Windows machine with routing env vars as needed (defaults: ``EXCEL_MCP_TRANSPORT=auto`` when unset).
 - Call **``write_data_to_excel``** with an **absolute** path to that file, ``workbook_transport=com`` or ``auto``, and a small ``data`` grid; with ``auto``, the workbook must be detected as open in Excel for COM to win on **write** tools.
-- Read-class tools (e.g. ``read_data_from_excel``, ``get_workbook_metadata``) stay **file-backed** per ADR 0003 even when ``workbook_transport=com``; use reads to verify on-disk content after a COM write if you also save.
+- Read-class tools (e.g. ``read_data_from_excel``, ``get_workbook_metadata``) stay **file-backed** per ADR 0003 even when ``workbook_transport=com``; after COM writes, call **`save_workbook`** (or use ``save_after_write=true`` on mutating tools) before reads so on-disk content matches Excel.
 - Optional: set ``save_after_write=true`` on the write so the server persists via COM ``Save`` when the executed backend was ``com``, or via openpyxl when it was ``file``.
 - Confirm routing in ``excel-mcp.log``: one JSON line per dispatch with ``workbook_backend`` ``com`` and a stable ``routing_reason`` (e.g. ``full_name_match`` / ``forced_com``) for writes routed to COM.
+- For release-style sign-off, follow **[`docs/plan/transport-routing/MANUAL-WINDOWS-RC-CHECKLIST.md`](docs/plan/transport-routing/MANUAL-WINDOWS-RC-CHECKLIST.md)** (Protected View, read-only, duplicate instance, save-then-read, chart/pivot ``v1_file_forced`` rows).
+
+### CI locally (contributors)
+
+GitHub Actions runs the same gates as **PR CI** via [`.github/workflows/reusable-validate-and-test.yml`](.github/workflows/reusable-validate-and-test.yml): editable install with **dev** extras, **pytest**, **`hatch build`**, and **`twine check dist/*`**.
+
+```bash
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+pytest
+hatch build
+twine check dist/*
+```
+
+No Excel or Windows COM is required for this default path (Linux CI).
 
 ## Available Tools
 

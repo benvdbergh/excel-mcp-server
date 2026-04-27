@@ -97,6 +97,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 ### 7. COM execution model
 
 - Dedicated **single-thread** worker for COM apartment rules (FR-6).
+- On Windows the worker thread must **initialize COM on that thread** (e.g. `pythoncom.CoInitialize()` / STA) before calling `win32com`; serialization alone is not enough for `GetActiveObject` and Excel marshalling.
 - Sync MCP handlers submit work and block on result; no requirement to convert all tools to `async def` unless FastMCP evolves.
 
 ### 8. Observability

@@ -25,6 +25,7 @@
   },
   "tools": [
     {"name": "create_workbook", "description": "Create a new Excel workbook"},
+    {"name": "save_workbook", "description": "Save workbook to disk (explicit persist; use before file reads after COM writes without per-write save)"},
     {"name": "create_worksheet", "description": "Create a new worksheet in a workbook"},
     {"name": "get_workbook_metadata", "description": "Get workbook metadata and structure"},
     {"name": "write_data_to_excel", "description": "Write data to Excel cells"},

@@ -70,7 +70,8 @@ def execute_routed_workbook_operation(
     Log line: a single ``logger.info`` with ``json.dumps`` of a dict using ADR
     0001-aligned field names (``workbook_transport``, ``workbook_backend``,
     ``routing_reason``, ``duration_ms``, ``workbook_path``, ``operation_name``,
-    optional ``mcp_tool_name``). Uses logger ``excel-mcp.routing`` by default
+    optional ``mcp_tool_name``, and ``v1_file_forced``: ``true`` when ADR 0004
+    applies). Uses logger ``excel-mcp.routing`` by default
     (stdio-safe: no ``print``).
     """
     _ = file_workbook_service
@@ -113,6 +114,8 @@ def execute_routed_workbook_operation(
             }
             if mcp_tool_name is not None:
                 payload["mcp_tool_name"] = mcp_tool_name
+            if resolution.reason == "v1_file_forced":
+                payload["v1_file_forced"] = True
             log.info(json.dumps(payload, separators=(",", ":"), ensure_ascii=True))
     if pending_com is not None:
         raise pending_com

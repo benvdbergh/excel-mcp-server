@@ -53,3 +53,4 @@ Depends on **STORY-6-1** for guarded COM imports.
 - `src/excel_mcp/com_executor.py`: `ComThreadExecutor` (queue + worker, blocking `submit`, `shutdown`).
 - `tests/test_com_executor.py`: serialization and lifecycle without Excel.
 - README: COM execution threading subsection.
+- Follow-up (implementation + docs, 2026): Windows worker initializes COM per thread (`pythoncom.CoInitialize` / `CoUninitialize`) so “honor COM apartment rules” includes STA on the executor thread, not only queue serialization (see `com_executor` module docstring, README *COM execution threading*, ADR 0002, `target-architecture.md` §7).

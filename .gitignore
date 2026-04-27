@@ -2,5 +2,9 @@
 dist/
 excel_files/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
 .notes/
 *.log

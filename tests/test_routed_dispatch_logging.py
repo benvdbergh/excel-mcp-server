@@ -20,7 +20,7 @@ from excel_mcp.routing.routed_dispatch import (  # noqa: E402
 )
 from excel_mcp.routing.routing_backend import RoutingBackend  # noqa: E402
 from excel_mcp.routing.routing_errors import ComExecutionNotImplementedError  # noqa: E402
-from excel_mcp.routing.tool_inventory import ToolKind  # noqa: E402
+from excel_mcp.routing.tool_inventory import ToolKind, get_tool_kind  # noqa: E402
 
 
 class _FakeWorkbookOpen:
@@ -168,6 +168,46 @@ def test_com_backend_invokes_callable_no_not_implemented_error(
     data = _last_json_record(caplog)
     assert data["workbook_backend"] == "com"
     assert data["routing_reason"] == "full_name_match"
+
+
+@pytest.mark.parametrize(
+    ("mcp_tool_name", "operation_name"),
+    [
+        ("create_chart", "create_chart_in_sheet"),
+        ("create_pivot_table", "create_pivot_table_in_sheet"),
+    ],
+)
+def test_dispatch_adr0004_v1_file_forced_auto_open_com_logs_flag(
+    caplog: pytest.LogCaptureFixture,
+    mcp_tool_name: str,
+    operation_name: str,
+) -> None:
+    """Open workbook + viable COM + transport auto still runs file; log marks ADR 0004."""
+    caplog.set_level(logging.INFO, logger="excel-mcp.routing")
+    rb = RoutingBackend(
+        _FakeWorkbookOpen(frozenset({_PATH})),
+        com_execution_available=True,
+        runtime_platform="win32",
+    )
+    out, backend = execute_routed_workbook_operation(
+        rb,
+        _DUMMY,
+        resolved_path=_PATH,
+        workbook_transport="auto",
+        tool_kind=get_tool_kind(mcp_tool_name),
+        com_strict=False,
+        operation_name=operation_name,
+        operation_callable=lambda: '{"ok": true}',
+        mcp_tool_name=mcp_tool_name,
+    )
+    assert out == '{"ok": true}'
+    assert backend == "file"
+    data = _last_json_record(caplog)
+    assert data["workbook_backend"] == "file"
+    assert data["routing_reason"] == "v1_file_forced"
+    assert data["v1_file_forced"] is True
+    assert data["workbook_transport"] == "auto"
+    assert data["mcp_tool_name"] == mcp_tool_name
 
 
 def test_redact_basename_default() -> None:

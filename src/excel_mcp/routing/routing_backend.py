@@ -100,10 +100,11 @@ class RoutingBackend:
         with ``v1_file_forced``. If COM is not viable, ``com_strict`` raises
         :class:`ComRoutingError`; otherwise file with
         ``com_unavailable_file_fallback`` / ``com_unsupported_non_windows``.
-        If COM is viable but the workbook is not open, ``com_strict`` raises
-        :class:`ComRoutingError` (ADR 0005); non-strict falls back to file with
-        ``com_workbook_not_open_file_fallback``. Otherwise ``com`` with
-        ``forced_com``.
+        If COM is viable, always selects ``com`` with ``forced_com`` (the
+        workbook may still be absent from Excel; :class:`ComWorkbookService`
+        returns a stable ``Error:`` string in that case). Open detection is not
+        used for this branch so operators can force COM without relying on the
+        detector matching ``FullName``.
 
         **Non-strict COM unavailable fallback:** documented here — returns file
         backend with ``com_unavailable_file_fallback`` (Windows, executor off)
@@ -180,17 +181,6 @@ class RoutingBackend:
             return WorkbookBackendResolution(
                 backend="file",
                 reason=reason,
-                requested_transport=req,
-            )
-        if not open_in_excel:
-            if com_strict:
-                raise self._strict_com_failure(
-                    reason_code="com_workbook_not_open",
-                    detail="workbook_transport=com requires workbook open in Excel",
-                )
-            return WorkbookBackendResolution(
-                backend="file",
-                reason="com_workbook_not_open_file_fallback",
                 requested_transport=req,
             )
         return WorkbookBackendResolution(

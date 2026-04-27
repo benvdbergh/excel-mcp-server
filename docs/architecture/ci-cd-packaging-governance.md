@@ -95,12 +95,11 @@ Prerequisites (operator checklist):
 
 ## 9) Current repository state (as of last review)
 
-Until the target workflows are added:
-
 - **`.github/workflows/publish.yml`** publishes on **`release: published`**, builds with **Hatch**, uses **`pypa/gh-action-pypi-publish`**, and sets **`id-token: write`** (appropriate for trusted publishing).
-- There is **no** PR CI workflow yet; **tests are not run** in Actions before publish; **`pytest`** should be declared under **dev / optional** dependencies in `pyproject.toml` for reproducible local and CI runs.
+- **`.github/workflows/ci.yml`** runs on **push** / **pull_request** to **`main`** / **`master`** and calls **`.github/workflows/reusable-validate-and-test.yml`** (`pytest`, **`hatch build`**, **`twine check dist/*`**) with least-privilege **`contents: read`** and job timeouts.
+- **`pyproject.toml`** declares **`[project.optional-dependencies].dev`** (including **`pytest`**, **`twine`**, **`hatch`**) for reproducible local runs and CI.
 
-Treat this section as a **gap list** to close by implementing §3 and declaring dev dependencies.
+Remaining governance items (optional follow-up): manual **release-packaging** / **release-pypi-publish** workflows per §3 if not yet present; align **publish.yml** to call the same reusable validate job before build when tightening release gates.
 
 ## 10) Related documents
 

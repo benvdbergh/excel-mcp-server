@@ -32,6 +32,7 @@ from excel_mcp.routing import (
     get_tool_kind,
     resolve_workbook_transport,
 )
+from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 from excel_mcp.routing.routing_errors import (
     ComExecutionNotImplementedError,
     ComRoutingError,
@@ -75,8 +76,13 @@ if com_execution_available:
     _COM_WORKBOOK_SERVICE = ComWorkbookService(_COM_EXECUTOR)
 else:
     _COM_EXECUTOR = None
+_workbook_open = (
+    ComWorkbookOpenInExcel(_COM_EXECUTOR)
+    if com_execution_available and _COM_EXECUTOR is not None
+    else StubWorkbookOpenInExcel()
+)
 _ROUTING_BACKEND = RoutingBackend(
-    StubWorkbookOpenInExcel(),
+    _workbook_open,
     com_execution_available=com_execution_available,
 )
 
@@ -445,6 +451,46 @@ def create_workbook(
     except Exception as e:
         logger.error(f"Error creating workbook: {e}")
         raise
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Save Workbook",
+        destructiveHint=True,
+    ),
+)
+def save_workbook(
+    filepath: str,
+    workbook_transport: Optional[str] = None,
+    save_after_write: Optional[bool] = None,
+) -> str:
+    """Persist the workbook to disk (file backend or COM host save).
+
+    Use this before ``read_data_from_excel`` when mutations ran via COM with
+    ``save_after_write=false`` so on-disk state matches Excel (ADR 0003).
+
+    The optional ``save_after_write`` follows the same env default as other
+    tools: when ``true``, the server runs a second explicit save after the
+    primary ``save_workbook`` operation. That is idempotent (save then save).
+    When omitted or ``false`` (default), only one save runs.
+    """
+    try:
+        return _workbook_dispatch(
+            "save_workbook",
+            filepath,
+            workbook_transport,
+            save_after_write,
+            lambda fp: _FILE_WORKBOOK_SERVICE.save_workbook(fp),
+            com_do_op=_com_dispatch(lambda c, fp: c.save_workbook(fp)),
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error saving workbook: {e}")
+        raise
+
 
 @mcp.tool(
     annotations=ToolAnnotations(

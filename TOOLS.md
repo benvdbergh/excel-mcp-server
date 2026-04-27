@@ -9,7 +9,9 @@ Optional keyword arguments (when the host exposes JSON Schema for tool inputs, t
 | Parameter | Type | Default | Meaning |
 | --------- | ---- | ------- | ------- |
 | `workbook_transport` | string, optional | from `EXCEL_MCP_TRANSPORT` env (`auto` if unset) | Workbook execution mode: `auto`, `file`, or `com` (case-insensitive). **Not** the MCP wire transport (stdio/SSE/HTTP). |
-| `save_after_write` | boolean, optional | from `EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT` env (`false` if unset) | On **mutating** tools only: when `true`, the server performs an explicit `save_workbook` after the operation. **Read-only tools** accept the argument but ignore it. |
+| `save_after_write` | boolean, optional | from `EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT` env (`false` if unset) | On **mutating** tools only: when `true`, the server performs an explicit `save_workbook` after the operation. **Read-only tools** accept the argument but ignore it. On the dedicated **`save_workbook`** tool, the primary operation is already a save; when `true`, the server saves a second time (idempotent). |
+
+Full operator env and read-vs-disk guidance: see repository **README** (Story 7-5).
 
 ## Workbook Operations
 
@@ -23,6 +25,22 @@ create_workbook(filepath: str) -> str
 
 - `filepath`: Path where to create workbook
 - Returns: Success message with created file path
+
+### save_workbook
+
+Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Lets agents flush host state before `read_data_from_excel` when using COM without `save_after_write` on every mutation (ADR 0003).
+
+```python
+save_workbook(
+    filepath: str,
+    workbook_transport: str | None = None,
+    save_after_write: bool | None = None,
+) -> str
+```
+
+- `filepath`: Path to the Excel file to save
+- `workbook_transport`, `save_after_write`: same workbook routing parameters as all tools (see table above). `save_after_write=true` runs an additional save after the main save (harmless duplicate flush).
+- Returns: Success message (e.g. confirmation including the file path)
 
 ### create_worksheet
 
