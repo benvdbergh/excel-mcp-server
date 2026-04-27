@@ -17,7 +17,6 @@ from urllib.parse import urljoin
 
 from openpyxl.utils import get_column_letter
 
-from excel_mcp import com_support
 from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
@@ -468,11 +467,13 @@ class ComWorkbookService:
         file path. When exactly one such workbook is open and nothing matches ``target``,
         return :data:`_ERR_COM_UNSAVED_PATH` instead of a generic not-open message.
         """
-        # Linux CI / non-Windows: pywin32 is absent; never import win32com here.
-        if not com_support.is_com_runtime_supported():
+        # Linux CI: no pywin32. Tests may inject a fake win32com via ``sys.modules``; only
+        # short-circuit on import failure, not on ``sys.platform`` (test_read_class_com_wiring
+        # fakes win32 routing but has no win32com mock).
+        try:
+            import win32com.client  # lazy: worker thread only
+        except ModuleNotFoundError:
             return None, _ERR_COM_NOT_OPEN
-
-        import win32com.client  # lazy: worker thread only
 
         target = normalize_workbook_target_for_com(filepath)
         try:
@@ -837,13 +838,13 @@ class ComWorkbookService:
 
     @staticmethod
     def _open_workbook_in_excel_com(filepath: str) -> str:
-        if not com_support.is_com_runtime_supported():
+        try:
+            import win32com.client
+        except ModuleNotFoundError:
             return (
                 "Error: COM workbook automation requires Windows with "
                 "optional dependency excel-com-mcp[com] (pywin32)."
             )
-
-        import win32com.client
 
         is_url = str(filepath).lower().startswith("https://")
         if not is_url:
@@ -1138,13 +1139,13 @@ class ComWorkbookService:
 
     @staticmethod
     def _create_workbook_com(filepath: str) -> str:
-        if not com_support.is_com_runtime_supported():
+        try:
+            import win32com.client  # lazy: worker thread only
+        except ModuleNotFoundError:
             return (
                 "Error: COM workbook automation requires Windows with "
                 "optional dependency excel-com-mcp[com] (pywin32)."
             )
-
-        import win32com.client  # lazy: worker thread only
 
         try:
             xl = win32com.client.GetActiveObject("Excel.Application")

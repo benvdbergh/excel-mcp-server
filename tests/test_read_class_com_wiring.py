@@ -88,6 +88,13 @@ def test_get_workbook_metadata_com_transport_wired_no_com_not_implemented_error(
     monkeypatch.setitem(srv.__dict__, "_ROUTING_BACKEND", rb)
 
     out = srv.get_workbook_metadata(path, workbook_transport="com", include_ranges=False)
-    # COM read is implemented; without Excel hosting the workbook, expect a stable open-path error.
+    # COM read is implemented; without Excel / open workbook, expect a stable error (not wiring).
+    # Linux CI: no pywin32 -> "Workbook not open...". Windows with pywin32, no Excel: "No running Excel...".
     assert "COM path not implemented" not in out
-    assert "Workbook not open in Excel" in out
+    assert any(
+        s in out
+        for s in (
+            "Workbook not open in Excel",
+            "No running Excel application",
+        )
+    )
