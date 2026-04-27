@@ -9,8 +9,9 @@ Every workbook tool takes **`filepath`** (sometimes shown as `filename` in older
 - **Absolute local path** — Normal file identity; `resolve_target` / `realpath` apply when the path allowlist is on (see README).
 - **`https://…` cloud workbook locator (v1)** — Allowed under **stdio** when validation passes (`parse_cloud_workbook_locator` in `excel_mcp.path_resolution`). Used for **COM** automation so the string matches Excel **`Workbook.FullName`** (often SharePoint). **Do not** pass `https` when **`EXCEL_FILES_PATH`** is set unless you use only local relative paths under the jail (cloud URLs are rejected there).
 - **Finding the right string for an open cloud file:** In Excel, **VBA Immediate** → `? ActiveWorkbook.FullName`. If the result is an `https://` URL, pass that as **`filepath`**, not only the synced folder path on disk—otherwise COM may not match and **`auto`** can try **`openpyxl`** and fail with **permission denied** while Excel has the file open.
+- **Discovery (no guesswork):** Call **`excel_list_open_workbooks`** (Windows + COM, Excel running) to get a JSON list of open workbooks with exact **`full_name`** strings. Copy a **`full_name`** into **`get_workbook_metadata`**, **`read_data_from_excel`**, writes, and lifecycle tools—same flow as the VBA one-liner, but in the MCP contract ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)). Allowlist policy applies when you **use** a path or URL as **`filepath`**; discovery only **reports** what Excel has open.
 
-Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Lifecycle** tools `excel_open_workbook` and `excel_close_workbook` are **COM-only** and do not use the routing matrix (ADR 0008). Authentication for M365 is **Excel/Office**, not the MCP server.
+Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Session / host** tools **`excel_list_open_workbooks`** (ADR 0009), **`excel_open_workbook`**, and **`excel_close_workbook`** are **COM-only** and do not use the routing matrix (ADR 0008 / ADR 0009). Authentication for M365 is **Excel/Office**, not the MCP server.
 
 ## Workbook routing parameters (all tools)
 
@@ -58,6 +59,21 @@ Close a workbook in the Excel host. Does not delete the file. **`save`**: if tru
 ```python
 excel_close_workbook(filepath: str, save: bool = False) -> str
 ```
+
+### excel_list_open_workbooks
+
+Enumerates **`Application.Workbooks`** in the running Excel instance and returns **JSON** (string payload) shaped as `{"workbooks": [{"full_name", "name", "is_active"}, ...]}`. **`full_name`** is the exact COM locator (absolute path or **`https://…`** SharePoint-style URL); use it as **`filepath`** on routed tools. Order matches Excel’s workbook collection indexes (deterministic).
+
+**Workflow:** discovery → choose **`full_name`** → **`get_workbook_metadata`** / **`read_data_from_excel`** / writes / **`excel_close_workbook`** as needed. **`get_workbook_metadata`** still requires **`filepath`**; there is no overload that omits it ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)).
+
+```python
+excel_list_open_workbooks(detail: str | None = None) -> str
+```
+
+- **`detail`**: reserved for future richer output; ignored today.
+- **COM-only**, **no `filepath`**; **`workbook_transport`** does not apply.
+- **Empty list:** Excel is running but no workbooks are open (normal).
+- **Errors:** Same class of messages as other COM tools when **`excel-com-mcp[com]`** is missing or Excel is not running (“No running Excel application found”).
 
 ### save_workbook
 

@@ -57,7 +57,7 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 
 ### Upgrading from 0.2.x
 
-**Epic 11 / ADR 0008** (release **0.3.0**): **`save_after_write` is removed** from mutating tools—call **`save_workbook`** when you need disk persistence. **Read tools are COM-first** (same as writes) when `workbook_transport` is `auto` or `com` and Excel has the workbook open; for on-disk snapshots use `workbook_transport=file` on reads or save first. New **lifecycle** tools: **`excel_open_workbook`**, **`excel_close_workbook`** (Windows + COM). Details: [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), and [ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md).
+**Epic 11 / ADR 0008** (release **0.3.0**): **`save_after_write` is removed** from mutating tools—call **`save_workbook`** when you need disk persistence. **Read tools are COM-first** (same as writes) when `workbook_transport` is `auto` or `com` and Excel has the workbook open; for on-disk snapshots use `workbook_transport=file` on reads or save first. **Lifecycle:** **`excel_open_workbook`**, **`excel_close_workbook`** (Windows + COM). **Discovery:** **`excel_list_open_workbooks`** lists open books and returns **`full_name`** strings for **`get_workbook_metadata`** and reads ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)); details in [`TOOLS.md`](TOOLS.md). Epic 11 docs: [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), [ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md).
 
 ---
 
@@ -237,7 +237,7 @@ These environment variables control **workbook** routing (file-backed ``openpyxl
 
 ### Optional MCP tool parameters (workbook routing)
 
-Most workbook tools accept optional **`workbook_transport`** (``auto`` \| ``file`` \| ``com``). When omitted, transport defaults to ``EXCEL_MCP_TRANSPORT``. **Lifecycle** tools **`excel_open_workbook`** / **`excel_close_workbook`** do not use this parameter (they are COM-only per ADR 0008). For **persistence** after mutations, call **`save_workbook`** (ADR 0008). These names refer to **workbook** execution routing (ADR 0001), not MCP wire transport.
+Most workbook tools accept optional **`workbook_transport`** (``auto`` \| ``file`` \| ``com``). When omitted, transport defaults to ``EXCEL_MCP_TRANSPORT``. **Discovery** (**`excel_list_open_workbooks`**) and **lifecycle** tools **`excel_open_workbook`** / **`excel_close_workbook`** do not use this parameter (they are COM-only per ADR 0009 / ADR 0008). For **persistence** after mutations, call **`save_workbook`** (ADR 0008). These names refer to **workbook** execution routing (ADR 0001), not MCP wire transport.
 
 ### Routing observability
 
@@ -282,6 +282,7 @@ COM apartment rules require Excel automation from a **consistent thread**. The s
 - Start **Microsoft Excel** manually and open the target ``.xlsx`` using **File → Open** (a running instance with the workbook loaded is required; the server does not launch Excel).
 - Run the MCP server (e.g. stdio) on the same Windows machine with routing env vars as needed (defaults: ``EXCEL_MCP_TRANSPORT=auto`` when unset).
 - Call **``write_data_to_excel``** with an **absolute** path to that file, ``workbook_transport=com`` or ``auto``, and a small ``data`` grid; with ``auto``, the workbook must be detected as open in Excel for COM to win.
+- Optional: call **`excel_list_open_workbooks`** when you need the exact **`filepath`**/`FullName` Excel reports (replacing VBA Immediate); then **`get_workbook_metadata`** / reads with that string.
 - Optional: use **`excel_open_workbook`** (or **`create_workbook(..., open_in_excel=true)`**) so Excel has the path open for **auto**→COM routing.
 - Read tools (e.g. ``read_data_from_excel``) use the **same** COM/file matrix; after COM writes, call **`save_workbook`** if you need the **on-disk** file to match the host.
 - Confirm routing in ``excel-mcp.log``: one JSON line per dispatch with ``workbook_backend`` ``com`` and a stable ``routing_reason`` (e.g. ``full_name_match`` / ``forced_com``) for writes routed to COM.

@@ -30,6 +30,10 @@ Use this list before RC sign-off for **workbook transport** (file vs COM) on **W
 
 - [ ] **Duplicate Excel instances** (same logical path open twice): server returns **fail-closed** error; operator closes duplicate instance or consolidates to a **single** Excel instance.
 
+### ADR 0009 — open workbook discovery
+
+- [ ] **`excel_list_open_workbooks`:** With **multiple** non-protected workbooks open, run discovery → verify JSON lists each **`full_name`** / **`name`** and marks exactly one **`is_active`: true** (matches the workbook Excel shows as active).
+
 ### ADR 0003 — save then read
 
 - [ ] **`save_workbook` after COM write, then read:** With COM mutations and **no** per-write save (`save_after_write` false or default), call **`save_workbook`**, then **`read_data_from_excel`** → read reflects flushed on-disk state as intended.
