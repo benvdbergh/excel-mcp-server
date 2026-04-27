@@ -85,6 +85,10 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
         ToolKind.SESSION,
         notes="ADR 0008: close workbook in Excel host with optional save.",
     ),
+    "excel_list_open_workbooks": ToolInventoryEntry(
+        ToolKind.SESSION,
+        notes="ADR 0009: enumerate Application.Workbooks; no filepath routing.",
+    ),
 }
 
 MCP_TOOL_INVENTORY: Final[Mapping[str, ToolInventoryEntry]] = MappingProxyType(

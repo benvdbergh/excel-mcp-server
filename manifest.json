@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "excel-com-mcp",
   "version": "0.3.0",
-  "description": "Model Context Protocol server for Excel (.xlsx): openpyxl plus optional Windows COM. COM-first routing (auto/com) for reads and writes when Excel has the workbook open; file fallback or workbook_transport=file for on-disk snapshots. chart/pivot v1 file-forced (ADR 0004). Persistence: save_workbook only (no save_after_write). Lifecycle: excel_open_workbook, excel_close_workbook (COM). filepath: absolute local path, OR (stdio, COM) same https FullName as Excel. M365 auth is via Excel. With EXCEL_MCP_ALLOWED_PATHS, https needs EXCEL_MCP_ALLOWED_URL_PREFIXES. Dev: uv run --project <repo> excel-com-mcp stdio. See README, TOOLS.md.",
+  "description": "Model Context Protocol server for Excel (.xlsx): openpyxl plus optional Windows COM. COM-first routing (auto/com) for reads and writes when Excel has the workbook open; file fallback or workbook_transport=file for on-disk snapshots. chart/pivot v1 file-forced (ADR 0004). Persistence: save_workbook only (no save_after_write). Discovery: excel_list_open_workbooks (COM; ADR 0009). Lifecycle: excel_open_workbook, excel_close_workbook (COM). filepath: absolute local path, OR (stdio, COM) same https FullName as Excel. M365 auth is via Excel. With EXCEL_MCP_ALLOWED_PATHS, https needs EXCEL_MCP_ALLOWED_URL_PREFIXES. Dev: uv run --project <repo> excel-com-mcp stdio. See README, TOOLS.md.",
   "author": {
     "name": "haris",
     "url": "https://github.com/benvdbergh"
@@ -27,6 +27,7 @@
     {"name": "create_workbook", "description": "Create a new Excel workbook; optional open_in_excel for COM session"},
     {"name": "excel_open_workbook", "description": "Open existing workbook in Excel (COM; Windows) for COM-first routing"},
     {"name": "excel_close_workbook", "description": "Close workbook in Excel host; optional save before close"},
+    {"name": "excel_list_open_workbooks", "description": "List workbooks open in Excel (JSON; COM); use full_name for metadata and reads (ADR 0009)"},
     {"name": "save_workbook", "description": "Save workbook to disk (explicit persist; use after mutations)"},
     {"name": "create_worksheet", "description": "Create a new worksheet in a workbook"},
     {"name": "get_workbook_metadata", "description": "Get workbook metadata and structure"},

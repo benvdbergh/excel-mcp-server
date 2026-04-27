@@ -1,4 +1,4 @@
-"""ADR 0008 lifecycle tools: excel_open_workbook / excel_close_workbook (COM-gated)."""
+"""ADR 0008 lifecycle tools and ADR 0009 discovery (COM-gated)."""
 
 from __future__ import annotations
 
@@ -24,6 +24,16 @@ def test_excel_open_workbook_when_com_unavailable_returns_error(
     Workbook().save(p)
     monkeypatch.setitem(srv.__dict__, "_COM_WORKBOOK_SERVICE", None)
     out = srv.excel_open_workbook(str(p.resolve()))
+    assert "not available" in out.lower()
+
+
+def test_excel_list_open_workbooks_when_com_unavailable_returns_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import excel_mcp.server as srv
+
+    monkeypatch.setitem(srv.__dict__, "_COM_WORKBOOK_SERVICE", None)
+    out = srv.excel_list_open_workbooks()
     assert "not available" in out.lower()
 
 

@@ -141,6 +141,7 @@ mcp = FastMCP(
         "If Excel reports https but you pass only a local synced path, COM may not match. "
         "M365 sign-in is via Excel/Office, not this server. "
         "Optional on tools: workbook_transport (auto|file|com). "
+        "Discovery: excel_list_open_workbooks (COM) for open workbook FullName locators (ADR 0009). "
         "Lifecycle: excel_open_workbook, excel_close_workbook (COM). create_workbook optional open_in_excel. "
         "Env: EXCEL_MCP_TRANSPORT, EXCEL_MCP_ALLOWED_PATHS, EXCEL_MCP_ALLOWED_URL_PREFIXES (with path allowlist). "
         "Full operator docs: repository README and TOOLS.md; local Cursor MCP: README section on uv run --project."
@@ -532,6 +533,31 @@ def excel_close_workbook(filepath: str, save: bool = False) -> str:
         return f"Error: {str(e)}"
     except Exception as e:
         logger.error(f"excel_close_workbook: {e}")
+        raise
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="List Open Workbooks",
+        readOnlyHint=True,
+    ),
+)
+def excel_list_open_workbooks(detail: Optional[str] = None) -> str:
+    """Enumerate workbooks open in Excel; returns JSON with ``full_name``, ``name``, ``is_active``.
+
+    Use each ``full_name`` (disk path or https SharePoint-style URL per Excel) with
+    ``get_workbook_metadata`` and other filepath-based tools. COM-only; no ``filepath``.
+    ``detail`` is reserved for future output levels and is ignored.
+
+    Requires Windows with ``excel-com-mcp[com]`` and a running Excel instance.
+    """
+    del detail
+    try:
+        if _COM_WORKBOOK_SERVICE is None:
+            return "Error: Excel COM automation is not available on this host."
+        return _COM_WORKBOOK_SERVICE.list_open_workbooks()
+    except Exception as e:
+        logger.error(f"excel_list_open_workbooks: {e}")
         raise
 
 
