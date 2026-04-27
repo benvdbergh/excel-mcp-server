@@ -103,10 +103,12 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 - Every routed operation logs a single JSON line (INFO on logger `excel-mcp.routing`, no stdout) with ADR 0001–aligned fields including **`workbook_transport`**, **`workbook_backend`**, **`routing_reason`**, **`duration_ms`**, **`workbook_path`** (basename redaction by default; optional full path via env), **`operation_name`**, and optional **`mcp_tool_name`** (NFR-3). See `README.md` — *Routing observability*.
 
-### 9. Packaging
+### 9. Packaging, CI/CD, and releases
 
-- `pyproject.toml`: optional dependency group e.g. `[project.optional-dependencies] com = [...]` (NFR-5).
-- CI: default job without COM; router tests with mocks; optional Windows+Excel manual checklist (PRD acceptance).
+- **`pyproject.toml`:** optional dependency group `[project.optional-dependencies] com = [...]` (NFR-5). Declare **dev** dependencies (e.g. `pytest`, linters) so local runs, PR CI, and release gates use the same toolchain.
+- **CI:** default job **without** COM stack; router and contract tests with mocks; pin Python minor in workflows for reproducibility. Optional Windows + Excel manual checklist remains PRD acceptance (see plan stories).
+- **Governance:** treat **validation**, **distribution build** (`hatch build`), and **PyPI publish** as separate concerns with one **reusable** quality gate; use **trusted publishing** (OIDC) for uploads; document stable check names for branch protection. Full policy: [ci-cd-packaging-governance.md](ci-cd-packaging-governance.md).
+- **Versioning and release notes:** SemVer for `0.y.z`, Conventional Commits as bump hints, changelog template, and PyPI channel strategy (PEP 440 pre-releases / TestPyPI). See [release-versioning-policy.md](release-versioning-policy.md).
 
 ## Tool routing (product default)
 
@@ -124,11 +126,13 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 2. Add `FileWorkbookService` façade; move server inline loads. **(Done — Epic 3.)**
 3. Add `RoutingBackend` with file-only implementation and mocked `workbook_open_in_excel`. **(Done — Epic 4.)**
 4. Extend tool schemas + env vars; document matrix in README. **(Done — Epic 5.)**
-5. Add `ComWorkbookService` behind `[com]` and thread executor; expand operation coverage. **(Planned — Epics 6–7.)**
+5. Add `ComWorkbookService` behind `[com]` and thread executor; expand operation coverage. **(Epic 6 delivered — skeleton + executor + packaging; Epic 7 — broaden COM write parity and release hardening.)**
 
 ## Related documents
 
 - `docs/specs/PRD-excel-mcp-transport-routing.md` — requirements
 - `docs/excel-mcp-fork-com-vs-file-routing.md` — blueprint
 - `docs/architecture/pre-fork-architecture.md` — baseline
+- `docs/architecture/ci-cd-packaging-governance.md` — CI/CD, PyPI, reusable workflows, permissions
+- `docs/architecture/release-versioning-policy.md` — SemVer, tags, changelog, release automation
 - `docs/architecture/adr/` — decisions

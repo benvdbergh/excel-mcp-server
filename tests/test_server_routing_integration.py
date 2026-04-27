@@ -35,7 +35,7 @@ def test_read_path_logs_routing_json(
     last = payloads[-1]
     assert last["workbook_transport"] == "file"
     assert last["workbook_backend"] == "file"
-    assert last["routing_reason"] == "forced_file"
+    assert last["routing_reason"] == "read_class_file_backed"
     assert last["operation_name"] == "workbook_metadata"
     assert last["mcp_tool_name"] == "get_workbook_metadata"
 

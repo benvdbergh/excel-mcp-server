@@ -172,7 +172,7 @@ Phasing aligns with blueprint §5 (inventory → COM module → router → schem
 
 ## Engineering progress (fork implementation)
 
-Phased delivery is tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](../plan/transport-routing/IMPLEMENTATION-ROADMAP.md). **Epics 1–5** (inventory through path policy, `FileWorkbookService`, `RoutingBackend` + observability, env/tool wiring) are **implemented in code**; **Epics 6–7** (COM packaging, `ComWorkbookService`, write parity, release hardening) remain **planned**.
+Phased delivery is tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](../plan/transport-routing/IMPLEMENTATION-ROADMAP.md). **Epics 1–6** are **implemented in code** (including optional `[com]` / pywin32, `ComThreadExecutor`, `ComWorkbookService` skeleton, and routed COM dispatch for supported writes). **Epic 7** (broad COM write parity, `save_workbook` MCP tool, docs/CI/release hardening) remains **planned**.
 
 ## References
 

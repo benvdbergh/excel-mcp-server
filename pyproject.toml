@@ -10,6 +10,12 @@ dependencies = [
     "openpyxl>=3.1.5",
     "typer>=0.16.0"
 ]
+
+[project.optional-dependencies]
+com = [
+    "pywin32>=307",
+]
+
 [[project.authors]]
 name = "haris"
 email = "haris.musa@outlook.com"

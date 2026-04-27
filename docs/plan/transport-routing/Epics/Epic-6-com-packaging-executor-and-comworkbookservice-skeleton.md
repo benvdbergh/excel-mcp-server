@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-6
 title: COM packaging, executor, and ComWorkbookService skeleton
-status: draft
+status: done
 depends_on:
   - EPIC-5
 traces_to:
@@ -16,7 +16,7 @@ acceptance_criteria:
   - All COM calls run on a single dedicated thread compatible with sync MCP handlers (FR-6).
   - ADR 0002 records the chosen library (pywin32 vs xlwings) and rationale in-repo.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-27"
 ---
 
 # Epic-6: COM packaging, executor, and ComWorkbookService skeleton
@@ -44,3 +44,16 @@ Requires **operator and schema wiring** from **EPIC-5** so COM can be selected s
 
 - `docs/architecture/adr/0002-com-automation-stack.md` — COM library decision.
 - `docs/architecture/target-architecture.md` — §6–7 `ComWorkbookService`, COM execution model.
+
+## Delivered (code pointers)
+
+| Area | Location |
+|------|----------|
+| Optional `[com]` extra | `pyproject.toml` → `[project.optional-dependencies].com` |
+| COM import / runtime probe | `src/excel_mcp/com_support.py` |
+| Single-thread executor (FR-6) | `src/excel_mcp/com_executor.py` (`ComThreadExecutor`) |
+| COM workbook façade (vertical slice) | `src/excel_mcp/routing/com_workbook_service.py` |
+| Read-class always file (ADR 0003) | `src/excel_mcp/routing/routing_backend.py` (`read_class_file_backed`) |
+| Dispatch to COM when selected | `src/excel_mcp/routing/routed_dispatch.py` |
+| Server wiring + save-after-write by backend | `src/excel_mcp/server.py` |
+| Tests | `tests/test_com_support.py`, `tests/test_com_executor.py`, routing/dispatch/server integration tests |

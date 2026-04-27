@@ -1,4 +1,4 @@
-"""Routed workbook dispatch with timing and structured logs (Epic 4, NFR-3)."""
+"""Routed workbook dispatch with timing and structured logs (Epics 4–6, NFR-3)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,11 @@ import os
 import time
 from collections.abc import Callable
 
-from excel_mcp.routing.routing_backend import RoutingBackend, WorkbookTransport
+from excel_mcp.routing.routing_backend import (
+    RoutingBackend,
+    WorkbookBackend,
+    WorkbookTransport,
+)
 from excel_mcp.routing.routing_errors import ComExecutionNotImplementedError
 from excel_mcp.routing.tool_inventory import ToolKind
 from excel_mcp.routing.workbook_operation_contract import (
@@ -43,17 +47,21 @@ def execute_routed_workbook_operation(
     com_strict: bool,
     operation_name: str,
     operation_callable: Callable[[], str],
+    com_operation_callable: Callable[[], str] | None = None,
     mcp_tool_name: str | None = None,
     logger: logging.Logger | None = None,
-) -> str:
-    """Resolve backend, optionally run file-only I/O, emit one structured log line.
+) -> tuple[str, WorkbookBackend]:
+    """Resolve backend, run file or COM I/O, emit one structured log line.
 
-    **Epic 4 execution:** only ``FileWorkbookService`` (or any
-    :class:`RoutedWorkbookOperations`) is invoked via ``operation_callable``.
-    If :meth:`RoutingBackend.resolve_workbook_backend` returns ``backend="com"``,
-    this function logs the routing decision then raises
-    :class:`ComExecutionNotImplementedError` — it does **not** fall back to
-    file I/O (would desync from Excel when COM was selected).
+    When resolution is ``backend="file"``, ``operation_callable`` runs (typically
+    closes over ``FileWorkbookService``).
+
+    When resolution is ``backend="com"``, ``com_operation_callable`` runs if
+    provided; if it is ``None``, logs then raises
+    :class:`ComExecutionNotImplementedError` (no silent file fallback).
+
+    Returns ``(result_text, executed_backend)`` where ``executed_backend`` is
+    ``"file"`` or ``"com"``.
 
     ``file_workbook_service`` is required for handler wiring consistency; callers
     typically close over it inside ``operation_callable``. This module does not
@@ -74,6 +82,8 @@ def execute_routed_workbook_operation(
     t0 = time.perf_counter()
     resolution = None
     pending_com: ComExecutionNotImplementedError | None = None
+    result: str | None = None
+    executed: WorkbookBackend | None = None
     try:
         resolution = routing_backend.resolve_workbook_backend(
             resolved_path=resolved_path,
@@ -82,9 +92,14 @@ def execute_routed_workbook_operation(
             com_strict=com_strict,
         )
         if resolution.backend == "com":
-            pending_com = ComExecutionNotImplementedError()
+            if com_operation_callable is None:
+                pending_com = ComExecutionNotImplementedError()
+            else:
+                result = com_operation_callable()
+                executed = "com"
         else:
-            return operation_callable()
+            result = operation_callable()
+            executed = "file"
     finally:
         if resolution is not None:
             duration_ms = (time.perf_counter() - t0) * 1000.0
@@ -101,3 +116,5 @@ def execute_routed_workbook_operation(
             log.info(json.dumps(payload, separators=(",", ":"), ensure_ascii=True))
     if pending_com is not None:
         raise pending_com
+    assert result is not None and executed is not None
+    return result, executed

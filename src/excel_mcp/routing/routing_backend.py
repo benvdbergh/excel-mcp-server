@@ -82,6 +82,11 @@ class RoutingBackend:
 
         **``transport="file"``** — always file, reason ``forced_file``.
 
+        **ADR 0003 — read-class tools:** :attr:`~ToolKind.READ` always selects the
+        **file** backend with reason ``read_class_file_backed`` for every
+        ``transport`` (``auto``, ``com``, ``file``). This runs before open/COM
+        checks so reads never route to COM in v1.
+
         **``transport="auto"``** — file when the workbook is not reported open;
         reason ``auto_workbook_not_open_file``. When open and ``tool_kind`` is
         :attr:`~ToolKind.V1_FILE_FORCED`, file is forced with ``v1_file_forced``
@@ -107,6 +112,13 @@ class RoutingBackend:
         """
         tk = _normalize_tool_kind(tool_kind)
         req: WorkbookTransport | None = transport
+
+        if tk == ToolKind.READ:
+            return WorkbookBackendResolution(
+                backend="file",
+                reason="read_class_file_backed",
+                requested_transport=req,
+            )
 
         if transport == "file":
             return WorkbookBackendResolution(

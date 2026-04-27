@@ -18,10 +18,10 @@ invest_check:
   small: true
   testable: true
 acceptance_criteria:
-  - workbook_open_in_excel(resolved_path) is behind an interface injectable in tests; default Windows implementation may be stubbed until Epic 6.
+  - workbook_open_in_excel(resolved_path) is behind an interface injectable in tests; default server wiring may use a stub; Epic 6 adds optional COM execution without removing injectability (NFR-6).
   - Tests run on CI without Excel using fakes (NFR-6).
 created: "2026-04-24"
-updated: "2026-04-25"
+updated: "2026-04-27"
 ---
 
 # Story-4-1: Injectable workbook_open_in_excel port with test doubles

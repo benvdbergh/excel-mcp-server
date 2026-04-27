@@ -19,7 +19,7 @@ acceptance_criteria:
   - save_workbook exists and is documented with read/stale caveats (ADR 0003).
   - README and manual checklist satisfy PRD release-level acceptance.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-27"
 ---
 
 # Epic-7: COM write parity, edge policies, save_workbook, and release hardening
@@ -44,7 +44,7 @@ Complete **COM implementations** for routed **write-class** tools per the invent
 
 ## Dependencies (narrative)
 
-Depends on **EPIC-6** COM runtime and skeleton service.
+Depends on **EPIC-6** (done): COM runtime, executor, and `ComWorkbookService` skeleton are in-tree; this epic broadens write parity and release hardening.
 
 ## Related sources
 

@@ -49,6 +49,39 @@ def test_auto_closed_workbook_uses_file() -> None:
     )
 
 
+def test_read_auto_open_workbook_stays_file_adr0003() -> None:
+    rb = RoutingBackend(
+        _FakeWorkbookOpen(frozenset({_PATH})),
+        com_execution_available=True,
+        runtime_platform="win32",
+    )
+    r = rb.resolve_workbook_backend(
+        resolved_path=_PATH,
+        transport="auto",
+        tool_kind=ToolKind.READ,
+        com_strict=False,
+    )
+    assert r.backend == "file"
+    assert r.reason == "read_class_file_backed"
+    assert r.requested_transport == "auto"
+
+
+def test_read_com_transport_stays_file_adr0003() -> None:
+    rb = RoutingBackend(
+        _FakeWorkbookOpen(frozenset({_PATH})),
+        com_execution_available=True,
+        runtime_platform="win32",
+    )
+    r = rb.resolve_workbook_backend(
+        resolved_path=_PATH,
+        transport="com",
+        tool_kind=ToolKind.READ,
+        com_strict=True,
+    )
+    assert r.backend == "file"
+    assert r.reason == "read_class_file_backed"
+
+
 def test_auto_open_workbook_uses_com_when_viable() -> None:
     rb = RoutingBackend(
         _FakeWorkbookOpen(frozenset({_PATH})),

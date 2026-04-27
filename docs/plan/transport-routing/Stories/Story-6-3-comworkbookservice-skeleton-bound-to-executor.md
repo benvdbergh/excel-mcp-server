@@ -2,7 +2,7 @@
 kind: story
 id: STORY-6-3
 title: ComWorkbookService skeleton bound to executor
-status: draft
+status: done
 parent: EPIC-6
 depends_on:
   - STORY-6-2
@@ -22,7 +22,7 @@ acceptance_criteria:
   - ComWorkbookService implements a minimal subset of the shared contract via COM executor (e.g. attach open workbook, no-op or single-cell write) with Windows manual smoke steps documented.
   - Router can delegate executed COM path to ComWorkbookService when com stack installed and workbook open.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-27"
 ---
 
 # Story-6-3: ComWorkbookService skeleton bound to executor
@@ -47,3 +47,11 @@ See frontmatter `acceptance_criteria`.
 ## Dependencies (narrative)
 
 Depends on **STORY-6-2** (executor) and **STORY-3-1** (parity target contract on file side).
+
+## Delivered
+
+- `src/excel_mcp/routing/com_workbook_service.py`: `ComWorkbookService` on `ComThreadExecutor`; real `write_cell_grid` / `save_workbook` against running Excel; other contract methods return a clear not-implemented string.
+- `routed_dispatch.py`: `com_operation_callable`, return `(result, workbook_backend)`.
+- `routing_backend.py`: `ToolKind.READ` → file + `read_class_file_backed` (ADR 0003).
+- `server.py`: COM service + executor when `is_com_runtime_supported()`; `_com_dispatch`; save-after-write on correct backend.
+- README: Windows manual smoke (COM write path).

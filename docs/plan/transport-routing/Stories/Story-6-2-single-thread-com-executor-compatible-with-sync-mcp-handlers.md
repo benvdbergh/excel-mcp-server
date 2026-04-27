@@ -2,7 +2,7 @@
 kind: story
 id: STORY-6-2
 title: Single-thread COM executor compatible with sync MCP handlers
-status: draft
+status: done
 parent: EPIC-6
 depends_on:
   - STORY-6-1
@@ -22,7 +22,7 @@ acceptance_criteria:
   - Threading model documented in README or architecture docs.
   - Tests validate serialization without Excel using mocks where possible.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-27"
 ---
 
 # Story-6-2: Single-thread COM executor compatible with sync MCP handlers
@@ -47,3 +47,9 @@ See frontmatter `acceptance_criteria`.
 ## Dependencies (narrative)
 
 Depends on **STORY-6-1** for guarded COM imports.
+
+## Delivered
+
+- `src/excel_mcp/com_executor.py`: `ComThreadExecutor` (queue + worker, blocking `submit`, `shutdown`).
+- `tests/test_com_executor.py`: serialization and lifecycle without Excel.
+- README: COM execution threading subsection.

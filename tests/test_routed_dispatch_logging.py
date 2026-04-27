@@ -54,7 +54,7 @@ def _last_json_record(caplog: pytest.LogCaptureFixture) -> dict:
 def test_dispatch_logs_required_fields_and_redacts_path(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger="excel-mcp.routing")
     rb = RoutingBackend(_FakeWorkbookOpen(frozenset()), runtime_platform="win32")
-    out = execute_routed_workbook_operation(
+    out, backend = execute_routed_workbook_operation(
         rb,
         _DUMMY,
         resolved_path=_PATH,
@@ -66,10 +66,11 @@ def test_dispatch_logs_required_fields_and_redacts_path(caplog: pytest.LogCaptur
         mcp_tool_name="get_workbook_metadata",
     )
     assert out == '{"ok": true}'
+    assert backend == "file"
     data = _last_json_record(caplog)
     assert data["workbook_transport"] == "file"
     assert data["workbook_backend"] == "file"
-    assert data["routing_reason"] == "forced_file"
+    assert data["routing_reason"] == "read_class_file_backed"
     assert data["operation_name"] == "workbook_metadata"
     assert data["mcp_tool_name"] == "get_workbook_metadata"
     assert data["workbook_path"] == "book.xlsx"
@@ -134,6 +135,39 @@ def test_com_backend_logs_then_raises(caplog: pytest.LogCaptureFixture) -> None:
     assert data["routing_reason"] == "full_name_match"
     assert data["workbook_transport"] == "auto"
     assert data["operation_name"] == "workbook_metadata"
+
+
+def test_com_backend_invokes_callable_no_not_implemented_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="excel-mcp.routing")
+    rb = RoutingBackend(
+        _FakeWorkbookOpen(frozenset({_PATH})),
+        com_execution_available=True,
+        runtime_platform="win32",
+    )
+    sentinel = "SENTINEL_COM_OK"
+
+    def _no_file() -> str:
+        raise AssertionError("file operation_callable must not run for COM backend")
+
+    out, backend = execute_routed_workbook_operation(
+        rb,
+        _DUMMY,
+        resolved_path=_PATH,
+        workbook_transport="auto",
+        tool_kind=ToolKind.WRITE,
+        com_strict=False,
+        operation_name="write_cell_grid",
+        operation_callable=_no_file,
+        com_operation_callable=lambda: sentinel,
+        mcp_tool_name="write_data_to_excel",
+    )
+    assert out == sentinel
+    assert backend == "com"
+    data = _last_json_record(caplog)
+    assert data["workbook_backend"] == "com"
+    assert data["routing_reason"] == "full_name_match"
 
 
 def test_redact_basename_default() -> None:

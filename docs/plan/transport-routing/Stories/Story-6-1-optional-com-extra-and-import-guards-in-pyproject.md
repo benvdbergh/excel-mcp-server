@@ -2,7 +2,7 @@
 kind: story
 id: STORY-6-1
 title: Optional com extra and import guards in pyproject
-status: draft
+status: done
 parent: EPIC-6
 depends_on:
   - STORY-1-2
@@ -21,7 +21,7 @@ acceptance_criteria:
   - pyproject.toml defines optional-dependencies com with chosen COM stack (ADR 0002 updated when choice is final).
   - Default install on Linux CI does not require COM packages (NFR-5, NFR-6).
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-27"
 ---
 
 # Story-6-1: Optional com extra and import guards in pyproject
@@ -46,3 +46,9 @@ See frontmatter `acceptance_criteria`.
 ## Dependencies (narrative)
 
 Depends on **STORY-1-2** so COM module boundaries align with the shared contract.
+
+## Delivered
+
+- `pyproject.toml`: optional group `com` with `pywin32>=307`.
+- `src/excel_mcp/com_support.py`: `COM_STACK_AVAILABLE`, `is_com_runtime_supported()`; no `win32com` import on non-Windows.
+- ADR 0002 documents pywin32 as the chosen stack; README notes optional install and license.

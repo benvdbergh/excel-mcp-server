@@ -160,13 +160,29 @@ Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel
 
 - **workbook_transport** — requested mode: ``auto``, ``file``, or ``com``.
 - **workbook_backend** — resolved backend after the selection matrix: ``file`` or ``com``.
-- **routing_reason** — stable reason string from ``RoutingBackend`` (e.g. ``forced_file``, ``full_name_match``).
+- **routing_reason** — stable reason string from ``RoutingBackend`` (e.g. ``forced_file``, ``read_class_file_backed``, ``full_name_match``).
 - **duration_ms** — wall time for resolve plus executed file I/O (when applicable).
 - **workbook_path** — redacted path (basename only by default; set ``EXCEL_MCP_LOG_FULL_PATHS=1`` for full path in break-glass scenarios).
 - **operation_name** — routed contract method name (e.g. ``read_range_with_metadata``).
 - **mcp_tool_name** — optional registered MCP tool name when supplied by the caller.
 
-**Planning / delivery status:** workbook transport epics and stories (Phases 1–5) are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md) and marked **done** in the epic/story frontmatter through Epic 5; COM packaging (Epics 6–7) is still **draft**.
+**Planning / delivery status:** workbook transport epics and stories are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md). Phases **1–6** are **done** in epic/story frontmatter (including optional `[com]`, `ComThreadExecutor`, and `ComWorkbookService` skeleton). **Epic 7** (COM write parity, `save_workbook` MCP tool, release hardening) remains **draft**.
+
+**Optional Windows COM (`[com]`):** to install pywin32 for COM-backed workbook routing, use `pip install excel-mcp-server[com]` (or the equivalent for your installer). pywin32 is distributed under the [PSF License Agreement](https://github.com/mhammond/pywin32/blob/main/LICENSE.txt) (same terms as CPython).
+
+### COM execution threading (Windows)
+
+COM apartment rules require Excel automation from a **consistent thread**. The server uses ``excel_mcp.com_executor.ComThreadExecutor``: a **single worker thread** pulls jobs from a queue; ``submit(fn, *args, **kwargs)`` runs ``fn`` on that thread and **blocks** the caller until the result is ready (or an exception is propagated), so synchronous MCP tool handlers stay compatible without turning every tool ``async``. The executor does **not** start Excel by itself. For tests or clean process teardown, call ``shutdown(wait=True)``; abrupt exit may still cut off in-flight work—see the module docstring on ``com_executor`` for limitations (including no reentrant ``submit`` from inside a job on the worker).
+
+### Windows manual smoke (COM write path)
+
+- Install the optional stack: ``pip install "excel-mcp-server[com]"`` (or your package equivalent) so ``pywin32`` is available.
+- Start **Microsoft Excel** manually and open the target ``.xlsx`` using **File → Open** (a running instance with the workbook loaded is required; the server does not launch Excel).
+- Run the MCP server (e.g. stdio) on the same Windows machine with routing env vars as needed (defaults: ``EXCEL_MCP_TRANSPORT=auto`` when unset).
+- Call **``write_data_to_excel``** with an **absolute** path to that file, ``workbook_transport=com`` or ``auto``, and a small ``data`` grid; with ``auto``, the workbook must be detected as open in Excel for COM to win on **write** tools.
+- Read-class tools (e.g. ``read_data_from_excel``, ``get_workbook_metadata``) stay **file-backed** per ADR 0003 even when ``workbook_transport=com``; use reads to verify on-disk content after a COM write if you also save.
+- Optional: set ``save_after_write=true`` on the write so the server persists via COM ``Save`` when the executed backend was ``com``, or via openpyxl when it was ``file``.
+- Confirm routing in ``excel-mcp.log``: one JSON line per dispatch with ``workbook_backend`` ``com`` and a stable ``routing_reason`` (e.g. ``full_name_match`` / ``forced_com``) for writes routed to COM.
 
 ## Available Tools
 

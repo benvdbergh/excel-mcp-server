@@ -6,6 +6,7 @@ from excel_mcp.routing.tool_inventory import (
     ToolKind,
     get_tool_kind,
 )
+from excel_mcp.routing.com_workbook_service import ComWorkbookService
 from excel_mcp.routing.file_workbook_service import FileWorkbookService
 from excel_mcp.routing.mcp_contract_bridge import contract_operation_name_for_mcp_tool
 from excel_mcp.routing.routed_dispatch import (
@@ -14,6 +15,7 @@ from excel_mcp.routing.routed_dispatch import (
 )
 from excel_mcp.routing.routing_backend import (
     RoutingBackend,
+    WorkbookBackend,
     WorkbookBackendResolution,
     WorkbookTransport,
 )
@@ -50,6 +52,8 @@ __all__ = [
     "EXCEL_MCP_COM_STRICT",
     "EXCEL_MCP_SAVE_AFTER_WRITE_DEFAULT",
     "EXCEL_MCP_TRANSPORT",
+    "ComWorkbookService",
+    "WorkbookBackend",
     "contract_operation_name_for_mcp_tool",
     "effective_com_strict",
     "effective_save_after_write",

@@ -17,11 +17,11 @@ The PRD lists both as candidates (`docs/specs/PRD-excel-mcp-transport-routing.md
 
 ## Decision
 
-**Record the choice here when implementation starts** — default recommendation for this codebase:
+**pywin32** (`win32com.client`) is the chosen COM stack for this codebase: it ships as the optional **`[com]`** extra in `pyproject.toml`, keeps the default install free of Windows-only wheels, and pairs with the single-thread COM executor design (explicit apartment/threading discipline on the caller).
 
-- Prefer **pywin32** for a **minimal optional extra** and explicit control inside the single-thread COM executor, **unless** the team values xlwings’ ergonomics enough to accept the extra dependency.
+xlwings remains a documented alternative in the context table above but is **not** a default dependency.
 
-The implemented choice must be reflected in:
+The implemented choice is reflected in:
 
 - `pyproject.toml` optional dependency group (e.g. `com`)
 - README prerequisites for Windows

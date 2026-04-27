@@ -17,7 +17,10 @@ from excel_mcp.exceptions import (
     ChartError
 )
 
+from excel_mcp import com_support
+from excel_mcp.com_executor import ComThreadExecutor
 from excel_mcp.routing import (
+    ComWorkbookService,
     FileWorkbookService,
     RoutingBackend,
     StubWorkbookOpenInExcel,
@@ -65,9 +68,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("excel-mcp")
 _FILE_WORKBOOK_SERVICE = FileWorkbookService()
+com_execution_available = com_support.is_com_runtime_supported()
+_COM_WORKBOOK_SERVICE: ComWorkbookService | None = None
+if com_execution_available:
+    _COM_EXECUTOR = ComThreadExecutor()
+    _COM_WORKBOOK_SERVICE = ComWorkbookService(_COM_EXECUTOR)
+else:
+    _COM_EXECUTOR = None
 _ROUTING_BACKEND = RoutingBackend(
     StubWorkbookOpenInExcel(),
-    com_execution_available=False,
+    com_execution_available=com_execution_available,
 )
 
 
@@ -77,6 +87,7 @@ def _workbook_dispatch(
     workbook_transport: Optional[str],
     save_after_write: Optional[bool],
     do_op: Callable[[str], str],
+    com_do_op: Callable[[str], str] | None = None,
 ) -> str:
     """Resolve path, route transport, run one contract op, optional explicit save."""
     full_path = get_excel_path(filepath)
@@ -84,7 +95,10 @@ def _workbook_dispatch(
     com_strict = effective_com_strict()
     tool_kind = get_tool_kind(mcp_tool_name)
     operation_name = contract_operation_name_for_mcp_tool(mcp_tool_name)
-    out = execute_routed_workbook_operation(
+    com_callable: Callable[[], str] | None = None
+    if _COM_WORKBOOK_SERVICE is not None and com_do_op is not None:
+        com_callable = lambda: com_do_op(full_path)
+    out, backend = execute_routed_workbook_operation(
         _ROUTING_BACKEND,
         _FILE_WORKBOOK_SERVICE,
         resolved_path=full_path,
@@ -93,13 +107,25 @@ def _workbook_dispatch(
         com_strict=com_strict,
         operation_name=operation_name,
         operation_callable=lambda: do_op(full_path),
+        com_operation_callable=com_callable,
         mcp_tool_name=mcp_tool_name,
     )
-    if get_tool_kind(mcp_tool_name) != ToolKind.READ and effective_save_after_write(
-        save_after_write
-    ):
-        _FILE_WORKBOOK_SERVICE.save_workbook(full_path)
+    if tool_kind != ToolKind.READ and effective_save_after_write(save_after_write):
+        if backend == "file":
+            _FILE_WORKBOOK_SERVICE.save_workbook(full_path)
+        elif backend == "com" and _COM_WORKBOOK_SERVICE is not None:
+            _COM_WORKBOOK_SERVICE.save_workbook(full_path)
     return out
+
+
+def _com_dispatch(com_fn: Callable[[ComWorkbookService, str], str]) -> Callable[[str], str] | None:
+    """Build ``com_do_op`` for :func:`_workbook_dispatch` when COM service is enabled."""
+    if _COM_WORKBOOK_SERVICE is None:
+        return None
+    svc = _COM_WORKBOOK_SERVICE
+    return lambda fp: com_fn(svc, fp)
+
+
 # Initialize FastMCP server
 mcp = FastMCP(
     "excel-mcp",
@@ -164,6 +190,9 @@ def apply_formula(
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.apply_formula(
                 fp, sheet_name, cell, formula
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.apply_formula(fp, sheet_name, cell, formula)
             ),
         )
     except (ValidationError, CalculationError) as e:
@@ -262,6 +291,28 @@ def format_range(
                 protection=protection,
                 conditional_format=conditional_format,
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.format_range(
+                    fp,
+                    sheet_name,
+                    start_cell,
+                    end_cell,
+                    bold=bold,
+                    italic=italic,
+                    underline=underline,
+                    font_size=font_size,
+                    font_color=font_color,
+                    bg_color=bg_color,
+                    border_style=border_style,
+                    border_color=border_color,
+                    number_format=number_format,
+                    alignment=alignment,
+                    wrap_text=wrap_text,
+                    merge_cells=merge_cells,
+                    protection=protection,
+                    conditional_format=conditional_format,
+                )
+            ),
         )
     except (ValidationError, FormattingError) as e:
         return f"Error: {str(e)}"
@@ -354,6 +405,9 @@ def write_data_to_excel(
             lambda fp: _FILE_WORKBOOK_SERVICE.write_cell_grid(
                 fp, sheet_name, data, start_cell
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.write_cell_grid(fp, sheet_name, data, start_cell)
+            ),
         )
     except (ValidationError, DataError) as e:
         return f"Error: {str(e)}"
@@ -382,6 +436,7 @@ def create_workbook(
             workbook_transport,
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_workbook(fp),
+            com_do_op=_com_dispatch(lambda c, fp: c.create_workbook(fp)),
         )
     except WorkbookError as e:
         return f"Error: {str(e)}"
@@ -411,6 +466,9 @@ def create_worksheet(
             workbook_transport,
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.create_worksheet(fp, sheet_name),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.create_worksheet(fp, sheet_name)
+            ),
         )
     except (ValidationError, WorkbookError) as e:
         return f"Error: {str(e)}"
@@ -455,6 +513,18 @@ def create_chart(
                 x_axis=x_axis,
                 y_axis=y_axis,
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.create_chart_in_sheet(
+                    fp,
+                    sheet_name,
+                    data_range,
+                    chart_type,
+                    target_cell,
+                    title=title,
+                    x_axis=x_axis,
+                    y_axis=y_axis,
+                )
+            ),
         )
     except (ValidationError, ChartError) as e:
         return f"Error: {str(e)}"
@@ -497,6 +567,17 @@ def create_pivot_table(
                 columns=columns,
                 agg_func=agg_func,
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.create_pivot_table_in_sheet(
+                    fp,
+                    sheet_name,
+                    data_range,
+                    rows,
+                    values,
+                    columns=columns,
+                    agg_func=agg_func,
+                )
+            ),
         )
     except (ValidationError, PivotError) as e:
         return f"Error: {str(e)}"
@@ -535,6 +616,15 @@ def create_table(
                 table_name=table_name,
                 table_style=table_style,
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.create_excel_table(
+                    fp,
+                    sheet_name,
+                    data_range,
+                    table_name=table_name,
+                    table_style=table_style,
+                )
+            ),
         )
     except DataError as e:
         return f"Error: {str(e)}"
@@ -567,6 +657,9 @@ def copy_worksheet(
             lambda fp: _FILE_WORKBOOK_SERVICE.copy_worksheet(
                 fp, source_sheet, target_sheet
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.copy_worksheet(fp, source_sheet, target_sheet)
+            ),
         )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
@@ -596,6 +689,9 @@ def delete_worksheet(
             workbook_transport,
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_worksheet(fp, sheet_name),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.delete_worksheet(fp, sheet_name)
+            ),
         )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
@@ -627,6 +723,9 @@ def rename_worksheet(
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.rename_worksheet(
                 fp, old_name, new_name
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.rename_worksheet(fp, old_name, new_name)
             ),
         )
     except (ValidationError, SheetError) as e:
@@ -692,6 +791,11 @@ def merge_cells(
             lambda fp: _FILE_WORKBOOK_SERVICE.merge_cells(
                 fp, sheet_name, start_cell, end_cell
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.merge_cells(
+                    fp, sheet_name, start_cell, end_cell
+                )
+            ),
         )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
@@ -724,6 +828,11 @@ def unmerge_cells(
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.unmerge_cells(
                 fp, sheet_name, start_cell, end_cell
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.unmerge_cells(
+                    fp, sheet_name, start_cell, end_cell
+                )
             ),
         )
     except (ValidationError, SheetError) as e:
@@ -796,6 +905,16 @@ def copy_range(
                 target_start,
                 target_sheet=target_sheet,
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.copy_cell_range(
+                    fp,
+                    sheet_name,
+                    source_start,
+                    source_end,
+                    target_start,
+                    target_sheet=target_sheet,
+                )
+            ),
         )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
@@ -833,6 +952,15 @@ def delete_range(
                 start_cell,
                 end_cell,
                 shift_direction,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.delete_cell_range(
+                    fp,
+                    sheet_name,
+                    start_cell,
+                    end_cell,
+                    shift_direction,
+                )
             ),
         )
     except (ValidationError, SheetError) as e:
@@ -941,6 +1069,9 @@ def insert_rows(
             lambda fp: _FILE_WORKBOOK_SERVICE.insert_rows(
                 fp, sheet_name, start_row, count
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.insert_rows(fp, sheet_name, start_row, count)
+            ),
         )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
@@ -973,6 +1104,9 @@ def insert_columns(
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.insert_columns(
                 fp, sheet_name, start_col, count
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.insert_columns(fp, sheet_name, start_col, count)
             ),
         )
     except (ValidationError, SheetError) as e:
@@ -1007,6 +1141,11 @@ def delete_sheet_rows(
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_sheet_rows(
                 fp, sheet_name, start_row, count
             ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.delete_sheet_rows(
+                    fp, sheet_name, start_row, count
+                )
+            ),
         )
     except (ValidationError, SheetError) as e:
         return f"Error: {str(e)}"
@@ -1039,6 +1178,11 @@ def delete_sheet_columns(
             save_after_write,
             lambda fp: _FILE_WORKBOOK_SERVICE.delete_sheet_columns(
                 fp, sheet_name, start_col, count
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.delete_sheet_columns(
+                    fp, sheet_name, start_col, count
+                )
             ),
         )
     except (ValidationError, SheetError) as e:
