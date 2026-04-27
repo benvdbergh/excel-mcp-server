@@ -2,11 +2,13 @@
 
 **Last reviewed:** 2026-04-28
 
+**Changelog file:** repository root [`CHANGELOG.md`](../../CHANGELOG.md) records user-facing release notes per version; bump **`[project] version`** in `pyproject.toml` (and **`manifest.json`**) before any PyPI upload—**duplicate file** errors mean the version is already on the index (see [PyPI help: file reuse](https://pypi.org/help/#file-name-reuse)).
+
 This document defines **semantic versioning**, **tagging**, **changelog / release notes**, and **automation options** for **`excel-com-mcp`** (this fork’s PyPI distribution). It mirrors the discipline of the reference **`workflows`** repository’s alpha release docs, adapted for **Python** and **PyPI** (`pyproject.toml` as the version source of truth).
 
 ## 1) Semantic versioning (SemVer)
 
-The public **Python package version** lives in **`[project] version`** in `pyproject.toml` and must match the **intended** Git tag for that release (without the leading `v` on the tag, the numeric part should align, e.g. tag `v0.1.9` → version `0.1.9`).
+The public **Python package version** lives in **`[project] version`** in `pyproject.toml` and must match the **intended** Git tag for that release (without the leading `v` on the tag, the numeric part should align, e.g. tag `v0.2.0` → version `0.2.0`).
 
 ### Pre-1.0 (`0.y.z`)
 

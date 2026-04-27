@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "excel-com-mcp",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Model Context Protocol server for Excel (.xlsx): openpyxl plus optional Windows COM. filepath must match the workbook identity: absolute local path, OR (stdio, COM) the same https SharePoint/FullName string Excel uses (? ActiveWorkbook.FullName). Not the MCP wire transport: workbook_transport (auto|file|com) selects file vs Excel COM. M365 auth is via Excel, not the server. With EXCEL_MCP_ALLOWED_PATHS, https targets need EXCEL_MCP_ALLOWED_URL_PREFIXES. Developer MCP: uv run --project <repo-root> excel-com-mcp stdio. See README and TOOLS.md.",
   "author": {
     "name": "haris",
