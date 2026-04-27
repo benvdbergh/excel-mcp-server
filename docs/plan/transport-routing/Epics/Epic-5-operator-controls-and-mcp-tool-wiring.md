@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-5
 title: Operator controls and MCP tool wiring
-status: draft
+status: done
 depends_on:
   - EPIC-4
 traces_to:
@@ -15,10 +15,18 @@ acceptance_criteria:
   - save_after_write exposed where specified; COM default persistence matches FR-8 / target architecture.
   - EXCEL_MCP_COM_STRICT behavior documented and tested per ADR 0005.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Epic-5: Operator controls and MCP tool wiring
+
+## Delivery summary
+
+| Theme | Where |
+|-------|--------|
+| Env defaults (workbook transport, COM strict / fallback, save default) | `src/excel_mcp/routing/routing_env.py`, `tests/test_routing_env.py`, README “Workbook transport and COM policy” |
+| Per-call `workbook_transport` / `save_after_write` | All `@mcp.tool` handlers in `src/excel_mcp/server.py`; `TOOLS.md`; `manifest.json` description |
+| Single dispatch gate + integration tests | `_workbook_dispatch` → `execute_routed_workbook_operation`; `src/excel_mcp/routing/mcp_contract_bridge.py`; `tests/test_server_routing_integration.py`, `tests/test_mcp_contract_bridge.py` |
 
 ## Description
 

@@ -2,7 +2,7 @@
 kind: story
 id: STORY-1-1
 title: Authoritative MCP tool inventory (read vs write vs v1 exception)
-status: draft
+status: done
 parent: EPIC-1
 depends_on: []
 traces_to:
@@ -22,7 +22,7 @@ acceptance_criteria:
   - Classifications trace to PRD tool routing section and blueprint §6.
   - Automated acceptance tests live under a descriptive test module (see Verification); story docs reference that module by path, not by story id in the filename.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-1-1: Authoritative MCP tool inventory (read vs write vs v1 exception)

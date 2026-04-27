@@ -2,7 +2,7 @@
 kind: story
 id: STORY-4-1
 title: Injectable workbook_open_in_excel port with test doubles
-status: draft
+status: done
 parent: EPIC-4
 depends_on:
   - STORY-2-1
@@ -21,7 +21,7 @@ acceptance_criteria:
   - workbook_open_in_excel(resolved_path) is behind an interface injectable in tests; default Windows implementation may be stubbed until Epic 6.
   - Tests run on CI without Excel using fakes (NFR-6).
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-4-1: Injectable workbook_open_in_excel port with test doubles

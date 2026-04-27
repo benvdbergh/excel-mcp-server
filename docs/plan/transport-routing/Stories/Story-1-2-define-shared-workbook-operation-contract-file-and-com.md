@@ -2,7 +2,7 @@
 kind: story
 id: STORY-1-2
 title: Define shared workbook operation contract (File and COM)
-status: draft
+status: done
 parent: EPIC-1
 depends_on:
   - STORY-1-1
@@ -22,7 +22,7 @@ acceptance_criteria:
   - Contract is reviewable in code (typed interface or module doc) and referenced by EPIC-3 facade tasks.
   - Automated acceptance tests live under a descriptive test module (see Verification); story docs reference that module by path, not by story id in the filename.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-1-2: Define shared workbook operation contract (File and COM)

@@ -2,7 +2,7 @@
 kind: story
 id: STORY-5-2
 title: Optional tool parameters workbook_transport and save_after_write
-status: draft
+status: done
 parent: EPIC-5
 depends_on:
   - STORY-5-1
@@ -21,7 +21,7 @@ acceptance_criteria:
   - Tools expose optional workbook_transport and save_after_write per FR-7 with JSON schema updates and manifest alignment.
   - File path ignores or documents save_after_write semantics per PRD.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-5-2: Optional tool parameters workbook_transport and save_after_write

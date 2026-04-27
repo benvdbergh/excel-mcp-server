@@ -2,7 +2,7 @@
 kind: story
 id: STORY-5-3
 title: Wire MCP handlers through RoutingBackend to backends
-status: draft
+status: done
 parent: EPIC-5
 depends_on:
   - STORY-4-3
@@ -21,7 +21,7 @@ acceptance_criteria:
   - Handlers obtain resolved path, effective transport, and dispatch via RoutingBackend to FileWorkbookService for executed operations in this phase.
   - Integration-style tests (still mock COM) cover at least one write and one read path through the router.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-5-3: Wire MCP handlers through RoutingBackend to backends

@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-1
 title: Tool inventory and shared workbook operation contract
-status: draft
+status: done
 depends_on: []
 traces_to:
   - path: docs/specs/PRD-excel-mcp-transport-routing.md
@@ -13,10 +13,14 @@ acceptance_criteria:
   - Every MCP tool in scope is classified read vs write (or exempt) with traceability to the blueprint tool table.
   - A single internal contract (protocol, ABC, or facade interface) lists operations both backends must implement for routed tools.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Epic-1: Tool inventory and shared workbook operation contract
+
+## Delivery summary
+
+Epic acceptance criteria are satisfied: authoritative inventory with read/write/`v1_file_forced` classification and a shared `RoutedWorkbookOperations` contract (`workbook_operation_contract.py`), verified by `tests/test_authoritative_mcp_tool_inventory.py` and `tests/test_shared_workbook_operation.py`.
 
 ## Implementation and verification
 

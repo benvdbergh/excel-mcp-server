@@ -2,7 +2,7 @@
 kind: story
 id: STORY-3-3
 title: Workbook lifecycle consistency (close on reads) where low-risk
-status: draft
+status: done
 parent: EPIC-3
 depends_on:
   - STORY-3-2
@@ -20,10 +20,14 @@ acceptance_criteria:
   - Documented improvements to wb.close patterns for read helpers where safe; no user-visible regression in file mode.
   - Any deferred items listed as debt with rationale.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-3-3: Workbook lifecycle consistency (close on reads) where low-risk
+
+## Delivery note
+
+Acceptance is met by **documenting deferred lifecycle debt** (workbooks opened inside legacy `excel_mcp.*` modules outside the façade) in `src/excel_mcp/routing/file_workbook_service.py` and keeping façade-scoped reads/writes consistent. No broad `wb.close` refactor across those modules in this iteration.
 
 ## Description
 

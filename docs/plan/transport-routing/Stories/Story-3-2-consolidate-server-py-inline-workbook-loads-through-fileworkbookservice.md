@@ -2,7 +2,7 @@
 kind: story
 id: STORY-3-2
 title: Consolidate server.py inline workbook loads through FileWorkbookService
-status: draft
+status: done
 parent: EPIC-3
 depends_on:
   - STORY-3-1
@@ -21,7 +21,7 @@ acceptance_criteria:
   - No remaining inline load_workbook in server.py for routed tools except explicitly documented temporary exceptions with linked follow-up.
   - get_data_validation_info and similar paths use the façade or shared loader.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-3-2: Consolidate server.py inline workbook loads through FileWorkbookService

@@ -166,6 +166,8 @@ Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel
 - **operation_name** — routed contract method name (e.g. ``read_range_with_metadata``).
 - **mcp_tool_name** — optional registered MCP tool name when supplied by the caller.
 
+**Planning / delivery status:** workbook transport epics and stories (Phases 1–5) are tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md) and marked **done** in the epic/story frontmatter through Epic 5; COM packaging (Epics 6–7) is still **draft**.
+
 ## Available Tools
 
 The server provides a comprehensive set of Excel manipulation tools. See [TOOLS.md](TOOLS.md) for complete documentation of all available tools.

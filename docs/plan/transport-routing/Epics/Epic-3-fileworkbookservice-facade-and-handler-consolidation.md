@@ -14,10 +14,14 @@ acceptance_criteria:
   - All file-based workbook operations for routed tools flow through FileWorkbookService (or documented exceptions pending COM).
   - Inline load_workbook usage in server.py is eliminated or justified with a follow-up story.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Epic-3: FileWorkbookService façade and handler consolidation
+
+## Delivery summary
+
+`FileWorkbookService` implements the full routed contract and `server.py` delegates routed tools to it (no inline `load_workbook` in handlers for those paths). Story 3-3 lifecycle hardening beyond the façade is **documented as deferred debt** in the module docstring of `src/excel_mcp/routing/file_workbook_service.py` (deeper modules still manage their own workbook handles).
 
 ## Description
 

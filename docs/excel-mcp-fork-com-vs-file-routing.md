@@ -6,6 +6,8 @@ This document describes how to evolve a **fork** of the Cursor **`user-excel`**-
 
 **Non-goals (initial fork):** macOS Excel COM parity (different story), driving **LibreOffice** via UNO, or replacing Graph API / SharePoint-only workflows.
 
+**Implementation status (2026-04-25):** Phases through **router + env + MCP tool wiring** are implemented in this fork; see [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](plan/transport-routing/IMPLEMENTATION-ROADMAP.md) and the PRD *Engineering progress* section. COM-backed execution and packaging remain future work (Epics 6–7).
+
 ---
 
 ## 1. Problem statement (why fork)

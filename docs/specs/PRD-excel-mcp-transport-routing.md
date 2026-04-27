@@ -6,7 +6,7 @@ project: excel-mcp-server
 version: 0.1
 status: draft
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-04-25
 source_blueprint: docs/excel-mcp-fork-com-vs-file-routing.md
 scale_profile: growth
 ---
@@ -169,6 +169,10 @@ Phasing aligns with blueprint §5 (inventory → COM module → router → schem
 - **Source:** Requirements trace to `docs/excel-mcp-fork-com-vs-file-routing.md` (architecture diagram, matrix, policies, testing, rollout).
 - **Rollout:** Ship with `transport` default `auto`, log chosen backend (per blueprint §8); optional upstream contribution path noted as non-blocking.
 - **Handoff:** `project-planning` should decompose FR-1–FR-12 and US-1–US-6 into epics/stories preserving IDs; `software-architecture` should own ADRs for COM stack, threading, and read-path parity.
+
+## Engineering progress (fork implementation)
+
+Phased delivery is tracked in [`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](../plan/transport-routing/IMPLEMENTATION-ROADMAP.md). **Epics 1–5** (inventory through path policy, `FileWorkbookService`, `RoutingBackend` + observability, env/tool wiring) are **implemented in code**; **Epics 6–7** (COM packaging, `ComWorkbookService`, write parity, release hardening) remain **planned**.
 
 ## References
 

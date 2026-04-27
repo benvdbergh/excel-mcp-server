@@ -2,7 +2,7 @@
 kind: story
 id: STORY-4-3
 title: Structured logging for every routed operation
-status: draft
+status: done
 parent: EPIC-4
 depends_on:
   - STORY-4-2
@@ -20,7 +20,7 @@ acceptance_criteria:
   - Routed calls emit structured fields transport, reason, duration_ms, workbook_path per redaction policy (NFR-3, US-6).
   - Log format is documented for operators.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-4-3: Structured logging for every routed operation

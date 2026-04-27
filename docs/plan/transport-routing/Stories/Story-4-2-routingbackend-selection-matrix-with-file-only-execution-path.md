@@ -2,7 +2,7 @@
 kind: story
 id: STORY-4-2
 title: RoutingBackend selection matrix with file-only execution path
-status: draft
+status: done
 parent: EPIC-4
 depends_on:
   - STORY-3-1
@@ -23,7 +23,7 @@ acceptance_criteria:
   - Mocked tests prove auto selects COM when workbook_open_in_excel is true and file when false (NFR-1, PRD AC1).
   - When transport is com and COM execution is not available, behavior matches ADR 0005 (documented error under strict; never silent file write for com+strict).
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-4-2: RoutingBackend selection matrix with file-only execution path

@@ -101,7 +101,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 ### 8. Observability
 
-- Every routed operation logs structured fields: `transport`, `reason`, `duration_ms`, `workbook_path` (redaction policy as needed) (NFR-3).
+- Every routed operation logs a single JSON line (INFO on logger `excel-mcp.routing`, no stdout) with ADR 0001–aligned fields including **`workbook_transport`**, **`workbook_backend`**, **`routing_reason`**, **`duration_ms`**, **`workbook_path`** (basename redaction by default; optional full path via env), **`operation_name`**, and optional **`mcp_tool_name`** (NFR-3). See `README.md` — *Routing observability*.
 
 ### 9. Packaging
 
@@ -120,11 +120,11 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 ## Migration from pre-fork
 
-1. Introduce path module + allowlist without changing behavior.
-2. Add `FileWorkbookService` façade; move server inline loads.
-3. Add `RoutingBackend` with file-only implementation and mocked `workbook_open_in_excel`.
-4. Extend tool schemas + env vars; document matrix in README.
-5. Add `ComWorkbookService` behind `[com]` and thread executor; expand operation coverage.
+1. Introduce path module + allowlist without changing behavior. **(Done — Epic 2.)**
+2. Add `FileWorkbookService` façade; move server inline loads. **(Done — Epic 3.)**
+3. Add `RoutingBackend` with file-only implementation and mocked `workbook_open_in_excel`. **(Done — Epic 4.)**
+4. Extend tool schemas + env vars; document matrix in README. **(Done — Epic 5.)**
+5. Add `ComWorkbookService` behind `[com]` and thread executor; expand operation coverage. **(Planned — Epics 6–7.)**
 
 ## Related documents
 

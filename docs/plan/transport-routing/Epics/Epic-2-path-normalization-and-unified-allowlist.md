@@ -14,7 +14,7 @@ acceptance_criteria:
   - resolve_target (or equivalent) returns a documented normalized absolute path used consistently for file, allowlist, and COM comparison (FR-1, US-4).
   - Allowlist / workspace containment uses the same normalized path for stdio and HTTP/SSE modes (FR-11).
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Epic-2: Path normalization and unified allowlist

@@ -2,7 +2,7 @@
 kind: story
 id: STORY-3-1
 title: Introduce FileWorkbookService delegating to existing modules
-status: draft
+status: done
 parent: EPIC-3
 depends_on:
   - STORY-1-2
@@ -22,7 +22,7 @@ acceptance_criteria:
   - FileWorkbookService exists and implements the shared contract for a first slice of operations (expandable).
   - Unit tests cover the façade delegation without requiring Excel.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-3-1: Introduce FileWorkbookService delegating to existing modules

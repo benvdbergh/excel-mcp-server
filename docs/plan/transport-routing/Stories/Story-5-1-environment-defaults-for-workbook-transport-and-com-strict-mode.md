@@ -2,7 +2,7 @@
 kind: story
 id: STORY-5-1
 title: Environment defaults for workbook transport and COM strict mode
-status: draft
+status: done
 parent: EPIC-5
 depends_on:
   - STORY-4-2
@@ -22,7 +22,7 @@ acceptance_criteria:
   - EXCEL_MCP_TRANSPORT defaults to auto and is documented as workbook transport, not MCP wire (ADR 0001).
   - EXCEL_MCP_COM_STRICT gates silent fallback per ADR 0005 with tests.
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Story-5-1: Environment defaults for workbook transport and COM strict mode

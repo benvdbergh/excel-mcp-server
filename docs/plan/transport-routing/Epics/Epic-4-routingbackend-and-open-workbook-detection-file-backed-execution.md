@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-4
 title: RoutingBackend and open-workbook detection (file-backed execution)
-status: draft
+status: done
 depends_on:
   - EPIC-3
 traces_to:
@@ -19,10 +19,21 @@ acceptance_criteria:
   - Each operation dispatched through RoutingBackend emits structured log fields transport, reason, duration_ms, workbook_path per policy (NFR-3).
   - transport=com when COM execution is not yet available follows ADR 0005 (clear error under strict; no silent file write where the matrix forbids it).
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 ---
 
 # Epic-4: RoutingBackend and open-workbook detection (file-backed execution)
+
+## Delivery summary
+
+| Theme | Where |
+|-------|--------|
+| Injectable open detection (FR-2, FR-10, NFR-6) | `src/excel_mcp/routing/workbook_open_detection.py`, `tests/test_workbook_open_in_excel_port.py` |
+| Selection matrix + reasons + ADR 0005 strict COM | `src/excel_mcp/routing/routing_backend.py`, `routing_errors.py`, `tests/test_routing_backend.py` |
+| Structured dispatch logging (NFR-3) | `src/excel_mcp/routing/routed_dispatch.py`, `tests/test_routed_dispatch_logging.py`, README “Routing observability” |
+| COM selected but no executor | `ComExecutionNotImplementedError` in `routing_errors.py` (no silent file write when COM was chosen) |
+
+Epic 5 wires MCP handlers through `execute_routed_workbook_operation`; Epic 4 delivers the router, port, and dispatch primitive.
 
 ## Description
 
@@ -49,10 +60,10 @@ Epic 4 **does not** redesign the façade; it **sits between** path resolution / 
 
 | Epic | Responsibility |
 |------|----------------|
-| **Epic 4** | **`RoutingBackend`** implementation, injectable **`workbook_open_in_excel`**, file-only **execution**, **structured logging** on router dispatch, **tests** proving the matrix and logging. |
-| **Epic 5** | Operator defaults (**`EXCEL_MCP_TRANSPORT`**, **`EXCEL_MCP_COM_STRICT`** per ADR 0005), **optional MCP tool parameters** (`workbook_transport`, `save_after_write` per **ADR 0001** / FR-7–8), and **Story-5-3**: refactor **`server.py`** so every routed tool uses **`RoutingBackend`** as the single gate instead of calling **`FileWorkbookService`** directly. |
+| **Epic 4** | **`RoutingBackend`** implementation, injectable **`workbook_open_in_excel`**, file-only **execution**, **structured logging** on router dispatch, **tests** proving the matrix and logging. **(Delivered.)** |
+| **Epic 5** | Operator defaults (**`EXCEL_MCP_TRANSPORT`**, **`EXCEL_MCP_COM_STRICT`** per ADR 0005), **optional MCP tool parameters** (`workbook_transport`, `save_after_write` per **ADR 0001** / FR-7–8), and **Story-5-3**: refactor **`server.py`** so every routed tool uses **`RoutingBackend`** as the single gate instead of calling **`FileWorkbookService`** directly. **(Delivered.)** |
 
-Epic 4 may introduce a small **dispatch helper** or test-only entry points so Story-4-2/4-3 can prove behavior end-to-end without duplicating Epic 5’s full handler + schema work.
+Epic 4 introduced **`execute_routed_workbook_operation`** (`routed_dispatch.py`) so routing + JSON logs could be tested before Epic 5 wired every handler.
 
 ## User stories (links)
 
