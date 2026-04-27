@@ -2,7 +2,7 @@
 
 This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **epics and stories** under `docs/plan/transport-routing/`, aligned with `docs/architecture/target-architecture.md` and ADRs `docs/architecture/adr/`.
 
-**Status (2026-04-27):** Epics **1–9** and **Epic 11** are **delivered** in code and operator docs. **Epic 12** ([open workbook discovery](Epics/Epic-12-open-workbook-discovery-tool.md), [ADR 0009](../../architecture/adr/0009-open-workbook-discovery-tool.md)) is **planned** (draft epic and stories). **Epic 9** ([cloud / SharePoint workbook locators for COM](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md)) is **delivered**. **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap. **Epic 10** ([COM read-class tools and routing](Epics/Epic-10-com-read-class-tools-and-routing.md)) is **superseded** by **[Epic 11](Epics/Epic-11-com-first-session-and-lifecycle.md)** — Epic-10 and **Story-10-*** files remain **historical** (ADR 0007 opt-in / file-default reads); **current behavior** follows **[ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)** and Epic-11 ([`CHANGELOG.md`](../../../CHANGELOG.md) **0.3.0**).
+**Status (2026-04-27):** Epics **1–9**, **Epic 11**, and **Epic 12** ([open workbook discovery](Epics/Epic-12-open-workbook-discovery-tool.md), [ADR 0009](../../architecture/adr/0009-open-workbook-discovery-tool.md)) are **delivered** in code and operator docs (package line **0.4.0**; see [`CHANGELOG.md`](../../../CHANGELOG.md)). **Epic 9** ([cloud / SharePoint workbook locators for COM](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md)) is **delivered**. **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap. **Epic 10** ([COM read-class tools and routing](Epics/Epic-10-com-read-class-tools-and-routing.md)) is **superseded** by **[Epic 11](Epics/Epic-11-com-first-session-and-lifecycle.md)** — Epic-10 and **Story-10-*** files remain **historical** (ADR 0007 opt-in / file-default reads); **current behavior** follows **[ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)** and Epic-11.
 
 ## Phasing (execution order)
 
@@ -19,9 +19,9 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | 9 | [Epic-9](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md) | SharePoint / `https` workbook locators for COM routing, URL allowlist, docs *(delivered)* |
 | 10 | [Epic-10](Epics/Epic-10-com-read-class-tools-and-routing.md) | *(Historical — superseded by Epic-11; ADR 0007-era opt-in COM reads.)* |
 | 11 | [Epic-11](Epics/Epic-11-com-first-session-and-lifecycle.md) | COM-first default routing, COM read parity, remove `save_after_write`, lifecycle tools, docs/tests *(delivered; **0.3.0**)* |
-| 12 | [Epic-12](Epics/Epic-12-open-workbook-discovery-tool.md) | Open workbook discovery MCP tool (`excel_list_open_workbooks` TBD), ADR 0009 *(planned)* |
+| 12 | [Epic-12](Epics/Epic-12-open-workbook-discovery-tool.md) | Open workbook discovery MCP tool **`excel_list_open_workbooks`**, ADR 0009 *(delivered; **0.4.0**)* |
 
-## Epic-12: Open workbook discovery (planned)
+## Epic-12: Open workbook discovery (delivered)
 
 **Epic document:** [Epic-12 — Open workbook discovery MCP tool](Epics/Epic-12-open-workbook-discovery-tool.md).
 
@@ -52,7 +52,7 @@ flowchart TD
 
 ## Epic-11: COM-first session and lifecycle (delivered)
 
-**Epic document:** [Epic-11 — COM-first session and lifecycle](Epics/Epic-11-com-first-session-and-lifecycle.md). **PyPI / version line:** **0.3.0** (see [`CHANGELOG.md`](../../../CHANGELOG.md)).
+**Epic document:** [Epic-11 — COM-first session and lifecycle](Epics/Epic-11-com-first-session-and-lifecycle.md). **Shipped in** **`0.3.0`** (see [`CHANGELOG.md`](../../../CHANGELOG.md); current release line is **`0.4.0`** with Epic-12 discovery).
 
 **Traces to:** [ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md), [COM-first workbook session design](../../architecture/com-first-workbook-session-design.md), [com-read-class-tools design](../../architecture/com-read-class-tools-design.md) (implementation parity), [ADR 0004](../../architecture/adr/0004-chart-pivot-com-parity-scope.md) (file-forced exceptions), [ADR 0005](../../architecture/adr/0005-com-strict-and-fallback-controls.md), [ADR 0006](../../architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md).
 

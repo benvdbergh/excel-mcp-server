@@ -2,13 +2,15 @@
 
 All notable changes to this project are documented in this file. The format is informal; align version bumps with [Semantic Versioning](https://semver.org/) and [docs/architecture/release-versioning-policy.md](docs/architecture/release-versioning-policy.md).
 
-## Unreleased
+## 0.4.0 — 2026-04-27
 
 ### Added
 
 - **Open workbook discovery ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)):** MCP tool **`excel_list_open_workbooks`** returns JSON enumerating **`Application.Workbooks`** (`full_name`, `name`, `is_active`), COM-only on the executor thread. Use each returned **`full_name`** as **`filepath`** on **`get_workbook_metadata`**, reads, and writes.
 
-**Release:** ship in the next **minor** version (e.g. **0.4.0**) per SemVer for new user-facing capability; `manifest.json` and operator docs updated in the same release.
+### Docs
+
+- README (upgrade notes), **`TOOLS.md`**, **`manifest.json`**, [`MANUAL-WINDOWS-RC-CHECKLIST.md`](docs/plan/transport-routing/MANUAL-WINDOWS-RC-CHECKLIST.md), [`IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md): discovery workflow, Windows checklist, epic status; [`release-versioning-policy.md`](docs/architecture/release-versioning-policy.md) last reviewed.
 
 ## 0.3.0 — 2026-04-2
 

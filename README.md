@@ -57,7 +57,11 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 
 ### Upgrading from 0.2.x
 
-**Epic 11 / ADR 0008** (release **0.3.0**): **`save_after_write` is removed** from mutating tools—call **`save_workbook`** when you need disk persistence. **Read tools are COM-first** (same as writes) when `workbook_transport` is `auto` or `com` and Excel has the workbook open; for on-disk snapshots use `workbook_transport=file` on reads or save first. **Lifecycle:** **`excel_open_workbook`**, **`excel_close_workbook`** (Windows + COM). **Discovery:** **`excel_list_open_workbooks`** lists open books and returns **`full_name`** strings for **`get_workbook_metadata`** and reads ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)); details in [`TOOLS.md`](TOOLS.md). Epic 11 docs: [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), [ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md).
+**Epic 11 / ADR 0008** (release **0.3.0**): **`save_after_write` is removed** from mutating tools—call **`save_workbook`** when you need disk persistence. **Read tools are COM-first** (same as writes) when `workbook_transport` is `auto` or `com` and Excel has the workbook open; for on-disk snapshots use `workbook_transport=file` on reads or save first. New **lifecycle** tools: **`excel_open_workbook`**, **`excel_close_workbook`** (Windows + COM). Details: [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), [ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md).
+
+### Upgrading from 0.3.x
+
+**Epic 12 / ADR 0009** (release **0.4.0**): **`excel_list_open_workbooks`** lists workbooks open in Excel and returns exact **`full_name`** locators for **`get_workbook_metadata`**, reads, and writes (replaces ad-hoc VBA/Immediate discovery). COM-only; see [`TOOLS.md`](TOOLS.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
