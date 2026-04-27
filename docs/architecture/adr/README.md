@@ -12,6 +12,7 @@ This folder records decisions that shape the Excel MCP workbook transport fork a
 | [0006](0006-cloud-workbook-locator-sharepoint-urls.md) | Cloud workbook locators (SharePoint `https` URLs) for COM routing *(accepted)* |
 | [0007](0007-com-read-class-tools-routing.md) | COM routing for read-class tools *(superseded by 0008)* |
 | [0008](0008-com-first-default-and-file-lifecycle-tools.md) | COM-first default routing, explicit file lifecycle tools, `save_after_write` removal *(accepted)* |
+| [0009](0009-open-workbook-discovery-tool.md) | Open workbook discovery tool (workbook-level enumeration); `get_workbook_metadata` stays single-book *(accepted)* |
 
 **Convention:** `Status` is one of *Proposed*, *Accepted*, *Superseded* (link to replacing ADR), *Deprecated*.
 

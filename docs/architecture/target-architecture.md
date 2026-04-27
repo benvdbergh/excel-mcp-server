@@ -72,6 +72,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 - Bind to **running** `Excel.Application` (no auto-start, FR-10).
 - Enumerate open workbooks; compare **normalized** full names to `resolve_target` output.
+- **Companion (agent-facing):** a dedicated MCP tool lists **open workbooks** and returns **`FullName`** strings so agents do not rely on external scripting to discover locators—especially **`https://…`** identities ([ADR 0006](adr/0006-cloud-workbook-locator-sharepoint-urls.md)). **`get_workbook_metadata`** remains **single-book** with required filepath ([ADR 0009](adr/0009-open-workbook-discovery-tool.md)).
 - Policies for duplicates, protected view, read-only: fail with actionable errors (FR-9) — surfaced through shared error types.
 
 ### 4. `RoutingBackend`
@@ -116,8 +117,9 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 | Class | Default `auto` behavior (target) |
 |-------|----------------------------------|
 | **Write-class** | Route to COM when workbook open in Excel and allowed; else file |
-| **Read-class** | **File-backed only** (openpyxl on disk). No COM read path in v1 (ADR 0003). Optional COM reads may be added later behind an explicit opt-in. |
-| **`save_workbook` (new)** | Routed like other **write-class** tools: COM when workbook is open in Excel (persist host state to disk); file stack when not. Lets agents **explicitly save** before file reads when using COM without `save_after_write` on every mutation (ADR 0003). |
+| **Read-class** | **COM-first** when viable and workbook identity matches an open book; else file/openpyxl fallback ([ADR 0008](adr/0008-com-first-default-and-file-lifecycle-tools.md)). Historical **file-only** default in ADR 0003 is superseded for product defaults. |
+| **`save_workbook`** | Routed like other **write-class** tools: COM when workbook is open in Excel (persist host state to disk); file stack when not. Explicit persistence (`save_after_write` removed per ADR 0008). |
+| **Open workbook discovery** | COM-primary enumeration of host **`Workbooks`**; returns locators for subsequent calls ([ADR 0009](adr/0009-open-workbook-discovery-tool.md)). Workbook-level only in v1; not a replacement for **`get_workbook_metadata`**. |
 
 `create_workbook` / net-new unsaved books: remain **file**-first; not routable by path until saved and opened in Excel (PRD out-of-scope for unstable paths).
 
@@ -131,6 +133,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 ## Related documents
 
+- [ADR 0009 — Open workbook discovery tool](adr/0009-open-workbook-discovery-tool.md) — enumeration vs `get_workbook_metadata`
 - `docs/specs/PRD-excel-mcp-transport-routing.md` — requirements
 - `docs/excel-mcp-fork-com-vs-file-routing.md` — blueprint
 - `docs/architecture/pre-fork-architecture.md` — baseline

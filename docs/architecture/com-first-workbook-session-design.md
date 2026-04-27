@@ -32,6 +32,17 @@ This document is the **target** software-architecture view for [ADR 0008](adr/00
   - **Explicit (new):** **“Open in Excel”** tool loads a **disk path** into the host so **subsequent** operations can use **COM-first** without relying on the user to have pre-opened the file. This reduces “path passed but Excel never opened” surprise.
 - **`create_workbook` vs file create (ADR 0008):** Today **`create_workbook`** is a **WRITE** in [`tool_inventory.py`](../../src/excel_mcp/routing/tool_inventory.py)—**file-side** creation. Product options: (a) keep one tool, add **optional `open_in_excel: bool`**, (b) split **“create on disk”** and **“create and open in Excel”** for clearer agent scripts. **No extra default save** after create once `save_after_write` is removed—agent calls **`save_workbook`** if they need persistence before close.
 
+### 2.1 Workbook-level discovery (target)
+
+Operators and agents need **`Workbook.FullName`** strings—especially **`https://…`** cloud locators—without external scripting. **[ADR 0009](adr/0009-open-workbook-discovery-tool.md)** records the product decision:
+
+- **Separate MCP tool** to enumerate **open workbooks** in the Excel host (COM-primary). **Do not** overload **`get_workbook_metadata`** when `filepath` is omitted; that tool stays **one locator in → one workbook’s metadata out**.
+- **Scope (this iteration):** **workbook-level only**—enumerate the **`Workbooks`** collection on the same **`Excel.Application`** used by the COM executor. **Not** in scope: multiple Excel instances / PID selection, or cross-process federation.
+- **Minimum payload per workbook:** **`FullName`** (exact COM identity), **`Name`**, and whether the workbook **is active**.
+- **Usage pattern:** **discover → choose locator → call** existing filepath-based tools (`get_workbook_metadata`, reads, writes, lifecycle) with that string.
+
+Optional **`detail`** knobs (e.g. sheet names only) may ship with the discovery tool implementation but remain distinct from **`get_workbook_metadata`** semantics.
+
 ---
 
 ## 3. Cloud HTTPS locators ([ADR 0006](adr/0006-cloud-workbook-locator-sharepoint-urls.md))
@@ -81,6 +92,7 @@ This document is the **target** software-architecture view for [ADR 0008](adr/00
 | **Open in Excel** (name TBD) | **WRITE** or new **SESSION** | Host-side effect; not “read” in the data sense. |
 | **Close in Excel** (name TBD) | **WRITE** or **SESSION** | Same. |
 | **File create** / `create_workbook` | **WRITE** | Clarify single vs split tool; optional open flag. |
+| **Open workbook discovery** (name TBD; e.g. `excel_list_open_workbooks`) | **SESSION** (or documented lifecycle tag) | Enumerate **`Workbooks`** in the host; return **`FullName`** / **`Name`** / active flag per [ADR 0009](adr/0009-open-workbook-discovery-tool.md). **Not** a substitute for **`get_workbook_metadata`** (filepath still required there). |
 
 **Optional new enum value `ToolKind.SESSION` (or `LIFECYCLE`):**
 
@@ -88,7 +100,7 @@ This document is the **target** software-architecture view for [ADR 0008](adr/00
 - **Routing:** Session tools are **COM-primary** for open/close; **file** backend may be **N/A** or **no-op** with clear errors—unlike **READ/WRITE** which dual-path through file/COM.
 - **Alternative:** Keep **`WRITE`** for all and tag session tools in **manifest metadata** only—simpler enum, less branching in `RoutingBackend`.
 
-**Reads:** No new read **tools**—existing read tools **gain** COM execution via routing change.
+**Reads:** Grid **read** tools remain the existing inventory; they **gain** COM execution via routing ([ADR 0008](adr/0008-com-first-default-and-file-lifecycle-tools.md)). **Discovery** is a **separate** tool ([ADR 0009](adr/0009-open-workbook-discovery-tool.md)), not a new cell-reading primitive.
 
 ---
 
@@ -108,6 +120,7 @@ This document is the **target** software-architecture view for [ADR 0008](adr/00
 | Document | Relevance |
 |----------|-----------|
 | [ADR 0008](adr/0008-com-first-default-and-file-lifecycle-tools.md) | Decision record |
+| [ADR 0009](adr/0009-open-workbook-discovery-tool.md) | Open workbook discovery vs `get_workbook_metadata` overload |
 | [ADR 0003](adr/0003-read-path-com-parity.md) | Historical: file reads; explicit save |
 | [ADR 0005](adr/0005-com-strict-and-fallback-controls.md) | Strict / fallback |
 | [ADR 0006](adr/0006-cloud-workbook-locator-sharepoint-urls.md) | HTTPS locators |

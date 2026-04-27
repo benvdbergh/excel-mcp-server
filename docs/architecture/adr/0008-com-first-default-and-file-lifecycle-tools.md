@@ -60,6 +60,7 @@ All **read-class** tools ([`tool_inventory.py`](../../../src/excel_mcp/routing/t
 
 ## Links
 
+- Related: [ADR 0009 — Open workbook discovery tool](0009-open-workbook-discovery-tool.md) (host enumeration; **`get_workbook_metadata`** stays single-book)
 - Supersedes: [ADR 0007 — COM read-class tools routing (draft)](0007-com-read-class-tools-routing.md)
 - Partially supersedes: [ADR 0003 — Read-path COM parity](0003-read-path-com-parity.md) (defaults and Phase 2 opt-in only)
 - [ADR 0006 — Cloud workbook locators](0006-cloud-workbook-locator-sharepoint-urls.md)
