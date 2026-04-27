@@ -2,7 +2,7 @@
 kind: story
 id: STORY-8-4
 title: Manual PyPI publish and harden release-published path
-status: draft
+status: done
 parent: EPIC-8
 depends_on:
   - STORY-8-2
@@ -24,12 +24,19 @@ acceptance_criteria:
   - "Only the publish job sets `id-token: write`; publish uses pinned Python consistent with CI."
   - "Existing `publish.yml` on `release: published` either invokes the same reusable validation before publish or is replaced by a pattern documented in governance §3."
   - "Release versioning doc §5 (automation options) references which triggers are active after merge."
-  - "README documents no-install MCP wiring for agentic hosts (e.g. Cursor, Claude Code, comparable MCP clients) using the published distribution identity: commands and JSON examples use the same package name as `pyproject.toml` `[project].name` and the stdio entrypoint; `manifest.json` `server.mcp_config` matches that command/args for registry-oriented installs."
+  - "README documents no-install MCP wiring for agentic hosts (e.g. Cursor, Claude Code, comparable MCP clients) using the published distribution identity: commands and JSON examples use the same package name as `pyproject.toml` `[project].name` and the stdio entrypoint; `manifest.json` `server.mcp_config` matches that command/args for registry-oriented installs (**`excel-com-mcp`** / **`uvx excel-com-mcp stdio`** on this fork)."
 created: "2026-04-27"
 updated: "2026-04-27"
 ---
 
 # Story-8-4: Manual PyPI publish and harden release-published path
+
+## As delivered
+
+- **`.github/workflows/release-pypi-publish.yml`** — **`workflow_dispatch`**, **`release_ref`**, **`pypi_target`** (`pypi` \| `testpypi`), reusable **validate** first, then **hatch build** + **`pypa/gh-action-pypi-publish`**; **`id-token: write`** only on publish job; GitHub Environments **`release`** / **`testpypi`**; PyPI project **`excel-com-mcp`** (OIDC trusted publishing on maintainer’s PyPI account).
+- **`publish.yml`** — **`release: published`** runs reusable validation, then publishes to **`https://pypi.org/project/excel-com-mcp`** (same gates as PR CI).
+- **`docs/architecture/release-versioning-policy.md` §5** — table of active workflow triggers for this repository.
+- **README** + **`manifest.json`** — **`excel-com-mcp`** for PyPI / **`uvx`** / MCP **`mcp_config`**; legacy **`excel-mcp-server`** console script also provided in **`pyproject.toml`** `[project.scripts]`.
 
 ## Description
 

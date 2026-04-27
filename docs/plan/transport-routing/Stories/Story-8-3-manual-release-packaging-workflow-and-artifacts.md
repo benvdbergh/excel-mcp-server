@@ -2,7 +2,7 @@
 kind: story
 id: STORY-8-3
 title: Manual release packaging workflow and artifacts
-status: draft
+status: done
 parent: EPIC-8
 depends_on:
   - STORY-8-2
@@ -26,6 +26,10 @@ updated: "2026-04-27"
 ---
 
 # Story-8-3: Manual release packaging workflow and artifacts
+
+## As delivered
+
+- **`.github/workflows/release-packaging.yml`** — **`workflow_dispatch`** with **`release_ref`**, **`artifact_retention_days`** (default **7**), **`validate-and-test`** (reusable) → **`package-distributions`** (**hatch build** → **`upload-artifact`**, `if-no-files-found: error`, **`dist/*.whl`**, **`dist/*.tar.gz`**), non-cancelling **concurrency** on **`release_ref`**.
 
 ## Description
 

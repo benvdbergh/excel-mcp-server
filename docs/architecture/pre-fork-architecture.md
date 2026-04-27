@@ -11,7 +11,7 @@ The Excel MCP Server exposes **Model Context Protocol (MCP)** tools so clients c
 | Aspect | Detail |
 |--------|--------|
 | **Language** | Python ≥ 3.10 |
-| **Entry** | Typer CLI: `excel-mcp-server` → `excel_mcp.__main__:app` |
+| **Entry** | Typer CLI: `excel-mcp-server` → `excel_mcp.__main__:app` (baseline; **this fork** also publishes **`excel-com-mcp`** on PyPI with console scripts **`excel-com-mcp`** and legacy **`excel-mcp-server`**) |
 | **MCP framework** | `FastMCP` (`mcp.server.fastmcp`) |
 | **Core I/O** | `openpyxl` only (no xlwings / pywin32 in default dependencies) |
 | **Manifest** | `manifest.json` lists MCP tools; aligns with `@mcp.tool` function names in `server.py` |

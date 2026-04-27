@@ -2,6 +2,8 @@
 
 Index of architecture material for this repository.
 
+**Package:** PyPI distribution **`excel-com-mcp`** (fork); import package remains **`excel_mcp`**.
+
 | Document | Purpose |
 |----------|---------|
 | [target-architecture.md](target-architecture.md) | To-be workbook transport routing architecture (PRD-aligned). |

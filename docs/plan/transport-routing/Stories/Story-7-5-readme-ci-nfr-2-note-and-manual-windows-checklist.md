@@ -48,7 +48,7 @@ See frontmatter `acceptance_criteria`.
 
 - Include **NFR-4** security note (no admin elevation by default).
 - Cross-link **IMPLEMENTATION-ROADMAP.md** from README optional—keep single source of truth for planning under `docs/plan/transport-routing/`.
-- **Default CI** and workflow layout are implemented under **[Epic-8](../Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md)** (**STORY-8-2**); this story verifies README and release narrative align with that pipeline.
+- **Default CI** and workflow layout are implemented under **[Epic-8](../Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md)** (**STORY-8-2**); Epic 8 is **done** including PyPI **`excel-com-mcp`**. This story verifies README and release narrative align with that pipeline and fork distribution naming.
 
 ## Dependencies (narrative)
 

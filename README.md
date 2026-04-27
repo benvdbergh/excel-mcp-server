@@ -266,7 +266,7 @@ The server provides a comprehensive set of Excel manipulation tools. See [TOOLS.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=haris-musa/excel-mcp-server&type=Date)](https://www.star-history.com/#haris-musa/excel-mcp-server&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=benvdbergh/excel-mcp-server&type=Date)](https://www.star-history.com/#benvdbergh/excel-mcp-server&Date)
 
 ## License
 

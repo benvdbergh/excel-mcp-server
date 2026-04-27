@@ -2,7 +2,7 @@
 kind: story
 id: STORY-8-1
 title: Declare dev dependencies and local validate commands
-status: draft
+status: done
 parent: EPIC-8
 depends_on: []
 traces_to:
@@ -26,6 +26,12 @@ updated: "2026-04-27"
 ---
 
 # Story-8-1: Declare dev dependencies and local validate commands
+
+## As delivered
+
+- **`[project.optional-dependencies].dev`** in `pyproject.toml` includes **pytest**, **twine**, **hatch** (and aligns with CI install **`pip install -e ".[dev]"`**).
+- **README** § *Development and CI parity* documents **`pytest`**, **`hatch build`**, **`twine check dist/*`** (plus **`uv sync --extra dev`** path).
+- **`docs/architecture/ci-cd-packaging-governance.md` §9** documents closed dev-deps gap for this fork.
 
 ## Description
 

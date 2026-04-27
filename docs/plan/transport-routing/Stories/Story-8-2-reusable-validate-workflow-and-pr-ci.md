@@ -2,7 +2,7 @@
 kind: story
 id: STORY-8-2
 title: Reusable validate workflow and PR CI
-status: draft
+status: done
 parent: EPIC-8
 depends_on:
   - STORY-8-1
@@ -26,6 +26,12 @@ updated: "2026-04-27"
 ---
 
 # Story-8-2: Reusable validate workflow and PR CI
+
+## As delivered
+
+- **`.github/workflows/reusable-validate-and-test.yml`** — `workflow_call`, **`checkout_ref`**, Python **3.12**, **`pip install -e ".[dev]"`**, **pytest**, **hatch build**, **`twine check dist/*`**, Actions pinned to commit SHAs.
+- **`.github/workflows/ci.yml`** — **CI** workflow on **`push` / `pull_request`** to **`main` / `master`**, job name **`validate-and-test`** (for branch protection: typically **`CI / validate-and-test`** in GitHub UI).
+- **`permissions: contents: read`**, job **`timeout-minutes`**, PR **concurrency** with cancel-in-progress per governance.
 
 ## Description
 

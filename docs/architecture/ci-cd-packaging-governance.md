@@ -1,6 +1,6 @@
 # CI/CD, packaging, and PyPI governance
 
-**Last reviewed:** 2026-04-27
+**Last reviewed:** 2026-04-28
 
 This document defines how **continuous integration**, **release packaging**, and **PyPI publishing** should operate for the **`excel-com-mcp`** distribution (fork-published package name). It is aligned with the same structural ideas used in the reference **`workflows`** repository (reusable quality gates, manual release paths, least-privilege permissions, documented check names), adapted for **Python**, **Hatch**, and **PyPI** instead of npm.
 
@@ -28,7 +28,7 @@ The `workflows` repo separates:
 
 ## 3) Target workflow map (repository layout)
 
-These filenames are the **intended** layout once implemented under `.github/workflows/`:
+These filenames are the **live** layout under `.github/workflows/` on this fork (Epic 8 delivered):
 
 | Workflow | Trigger | Role |
 |----------|---------|------|
@@ -100,7 +100,7 @@ Prerequisites (operator checklist):
 - **`.github/workflows/release-packaging.yml`** is **`workflow_dispatch`** manual packaging: **`release_ref`** + optional **`artifact_retention_days`** → reusable gates → **`hatch build`** → **`upload-artifact`** on **`dist/*.whl`** and **`dist/*.tar.gz`** (`if-no-files-found: error`).
 - **`.github/workflows/release-pypi-publish.yml`** is **`workflow_dispatch`** manual publish: **`release_ref`** + **`pypi_target`** (`pypi` | `testpypi`) → reusable gates → **`hatch build`** → **`pypa/gh-action-pypi-publish`** (`id-token: write` only on the publish job). **Production** uses GitHub Environment **`release`**; **TestPyPI** uses environment **`testpypi`** (create it in the repo to match PyPI trusted publisher settings).
 - Third-party Actions in the reusable workflow, **`publish.yml`**, **`release-packaging.yml`**, and **`release-pypi-publish.yml`** are pinned to **full commit SHAs** (see YAML comments for the corresponding tag).
-- **`pyproject.toml`** declares **`[project.optional-dependencies].dev`** (including **`pytest`**, **`twine`**, **`hatch`**) so **`pip install -e ".[dev]"`** / **`uv sync --extra dev`** matches CI installs.
+- **`pyproject.toml`** — **`[project].name`** is **`excel-com-mcp`** (this fork’s PyPI project, distinct from upstream **`excel-mcp-server`**); **`[project.optional-dependencies].dev`** (including **`pytest`**, **`twine`**, **`hatch`**) so **`pip install -e ".[dev]"`** / **`uv sync --extra dev`** matches CI installs.
 
 **Closed gap:** dev dependencies (including **pytest**) are declared in **`pyproject.toml`**; README documents the local **`pytest` / `hatch build` / `twine check`** sequence for parity with CI.
 

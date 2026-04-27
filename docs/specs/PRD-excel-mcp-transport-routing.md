@@ -2,11 +2,11 @@
 title: Product Requirements Document
 type: prd
 product: Excel MCP Server (fork) — File vs COM transport routing
-project: excel-mcp-server
+project: excel-com-mcp
 version: 0.1
 status: draft
 created: 2026-04-24
-updated: 2026-04-25
+updated: 2026-04-27
 source_blueprint: docs/excel-mcp-fork-com-vs-file-routing.md
 scale_profile: growth
 ---

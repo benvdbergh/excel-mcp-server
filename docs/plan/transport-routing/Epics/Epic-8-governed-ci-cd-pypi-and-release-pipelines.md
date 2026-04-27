@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-8
 title: Governed CI/CD, PyPI packaging, and release pipelines
-status: draft
+status: done
 depends_on: []
 traces_to:
   - path: docs/architecture/ci-cd-packaging-governance.md
@@ -14,12 +14,16 @@ acceptance_criteria:
   - Manual release packaging produces versioned sdist/wheel artifacts with configurable retention.
   - Manual PyPI publish path exists with least-privilege permissions and optional alignment to GitHub Release publish via shared reusable gates.
   - Operator can follow governance docs to configure branch protection check names and PyPI trusted publishing.
-  - Documentation allows configuring the MCP from a PyPI-based no-install pattern (e.g. `uvx` + distribution name) in agentic clients; README and `manifest.json` stay aligned with `[project].name` (see Story-8-4).
+  - Documentation allows configuring the MCP from a PyPI-based no-install pattern (e.g. `uvx` + distribution name) in agentic clients; README and `manifest.json` stay aligned with `[project].name` (**`excel-com-mcp`** on this fork; see Story-8-4).
 created: "2026-04-27"
 updated: "2026-04-27"
 ---
 
 # Epic-8: Governed CI/CD, PyPI packaging, and release pipelines
+
+## Delivery status
+
+**Delivered** on this fork. PyPI distribution **`excel-com-mcp`** (separate from upstream **`excel-mcp-server`**). Workflows in use: **`ci.yml`**, **`reusable-validate-and-test.yml`**, **`release-packaging.yml`**, **`release-pypi-publish.yml`**, **`publish.yml`** (GitHub Release → PyPI), all aligned with governance and **`release-versioning-policy.md` §5 (active triggers).
 
 ## Description
 
