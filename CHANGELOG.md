@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file. The format is informal; align version bumps with [Semantic Versioning](https://semver.org/) and [docs/architecture/release-versioning-policy.md](docs/architecture/release-versioning-policy.md).
 
+## 0.4.1 — 2026-05-08
+
+### Fixed
+
+- **COM range read resiliency:** `read_data_from_excel` on COM transport now detects sparse/blank anomalies from bulk `Range.Value2` and falls back to direct per-cell reads when mismatches are detected. This addresses cases where grouped/outlined sheet regions returned mostly `null` values despite populated cells.
+
+### Tests
+
+- Added COM regression coverage for fallback behavior in `tests/test_com_workbook_service.py`.
+
 ## 0.4.0 — 2026-04-27
 
 ### Added

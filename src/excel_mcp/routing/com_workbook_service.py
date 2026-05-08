@@ -167,6 +167,74 @@ def _normalize_excel_matrix(val: Any) -> List[List[Any]]:
     return [list(val)]
 
 
+def _is_blankish_excel_value(val: Any) -> bool:
+    """Treat Excel-empty values as blank for sparse matrix heuristics."""
+    return val is None or val == ""
+
+
+def _direct_read_matrix_com(
+    ws: Any, srow: int, scol: int, nrows: int, ncols: int
+) -> List[List[Any]]:
+    """Read a rectangular range cell-by-cell via ``Worksheet.Cells``."""
+    out: List[List[Any]] = []
+    for ir in range(nrows):
+        r = srow + ir
+        row_vals: List[Any] = []
+        for ic in range(ncols):
+            c = scol + ic
+            try:
+                row_vals.append(ws.Cells(r, c).Value2)
+            except Exception:
+                row_vals.append(None)
+        out.append(row_vals)
+    return out
+
+
+def _should_fallback_to_direct_read_com(
+    ws: Any,
+    matrix: List[List[Any]],
+    srow: int,
+    scol: int,
+    nrows: int,
+    ncols: int,
+) -> bool:
+    """Detect COM ``Range.Value2`` sparsity anomalies and trigger direct cell reads.
+
+    Some workbooks (often with outline/group/filter-heavy layouts) can return a dense
+    shape with unexpectedly many ``None`` entries from bulk ``Range.Value2`` while
+    direct ``Cells(r, c).Value2`` still returns values. We sample only blank-looking
+    bulk cells to keep the fast path cheap.
+    """
+    if nrows <= 0 or ncols <= 0:
+        return False
+
+    max_checks = 24
+    checked = 0
+    mismatches = 0
+    for ir in range(nrows):
+        if checked >= max_checks:
+            break
+        row_vals = matrix[ir] if ir < len(matrix) else []
+        for ic in range(ncols):
+            if checked >= max_checks:
+                break
+            bulk_val = row_vals[ic] if ic < len(row_vals) else None
+            if not _is_blankish_excel_value(bulk_val):
+                continue
+            r = srow + ir
+            c = scol + ic
+            try:
+                direct_val = ws.Cells(r, c).Value2
+            except Exception:
+                direct_val = None
+            checked += 1
+            if not _is_blankish_excel_value(direct_val):
+                mismatches += 1
+                if mismatches >= 3:
+                    return True
+    return False
+
+
 def _com_used_bounds(ws: Any) -> Tuple[int, int, int, int]:
     """Return min_row, min_col, max_row, max_col from ``Worksheet.UsedRange``."""
     try:
@@ -618,6 +686,8 @@ class ComWorkbookService:
             return f"Error: {exc}"
 
         matrix = _normalize_excel_matrix(raw_vals)
+        if _should_fallback_to_direct_read_com(ws, matrix, srow, scol, nrows, ncols):
+            matrix = _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
         for ir in range(nrows):
             row_vals = matrix[ir] if ir < len(matrix) else []
             for ic in range(ncols):

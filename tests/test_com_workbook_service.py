@@ -94,6 +94,49 @@ def test_write_cell_grid_success_message(book_path):
     assert rng.Value == ((1, 2),)
 
 
+def test_read_range_with_metadata_fallback_reads_direct_cells(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Value2 = ((None, None), (None, None))
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 2
+    used.Columns.Count = 2
+    ws.UsedRange = used
+
+    direct_vals = {
+        (1, 1): "A11",
+        (1, 2): "B11",
+        (2, 1): "A12",
+        (2, 2): "B12",
+    }
+    cells: dict[tuple[int, int], MagicMock] = {}
+    for coord, val in direct_vals.items():
+        cell = MagicMock()
+        cell.Value2 = val
+        cell.Validation = MagicMock()
+        cell.Validation.Type = 0
+        cells[coord] = cell
+    cells[(1, 1)].Resize = MagicMock(return_value=rng)
+
+    ws.Cells = MagicMock(side_effect=lambda r, c: cells[(r, c)])
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.read_range_with_metadata(book_path, "Sheet1", "A1", "B2")
+
+    data = json.loads(raw)
+    values = [c["value"] for c in data["cells"]]
+    assert values == ["A11", "B11", "A12", "B12"]
+
+
 def test_save_workbook_invokes_save(book_path):
     wb = _workbook_mock(book_path, {})
     wb.Save = MagicMock()
