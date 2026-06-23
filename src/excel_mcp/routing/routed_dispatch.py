@@ -44,6 +44,22 @@ class RoutedResponseWarning(TypedDict):
     message: str
 
 
+FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE = "file_backend_formula_not_evaluated"
+FILE_BACKEND_FORMULA_NOT_EVALUATED_MESSAGE = (
+    "The file (openpyxl) backend does not evaluate Excel formulas; "
+    "cached values may be missing (null). Prefer COM routing "
+    "(workbook_transport=auto or com) when the workbook is open in Excel."
+)
+
+
+def file_backend_formula_not_evaluated_warning() -> RoutedResponseWarning:
+    """ADR 0010 warning when openpyxl reads formula cells without evaluation."""
+    return {
+        "code": FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
+        "message": FILE_BACKEND_FORMULA_NOT_EVALUATED_MESSAGE,
+    }
+
+
 def build_routed_response_envelope(
     result_text: str,
     meta: RoutedDispatchMeta | Mapping[str, Any],

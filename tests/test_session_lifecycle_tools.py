@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -35,6 +36,20 @@ def test_excel_list_open_workbooks_when_com_unavailable_returns_error(
     monkeypatch.setitem(srv.__dict__, "_COM_WORKBOOK_SERVICE", None)
     out = srv.excel_list_open_workbooks()
     assert "not available" in out.lower()
+
+
+def test_excel_list_open_workbooks_passes_detail_to_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import excel_mcp.server as srv
+
+    class _StubCom:
+        def list_open_workbooks(self, detail=None):
+            return json.dumps({"detail": detail, "workbooks": []})
+
+    monkeypatch.setitem(srv.__dict__, "_COM_WORKBOOK_SERVICE", _StubCom())
+    out = srv.excel_list_open_workbooks(detail="active_context")
+    assert json.loads(out)["detail"] == "active_context"
 
 
 def test_excel_close_workbook_when_com_unavailable_returns_error(

@@ -10,7 +10,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from excel_mcp.routing.com_workbook_service import ComWorkbookService
+from excel_mcp.routing.com_workbook_service import (
+    ComWorkbookService,
+    _should_fallback_to_direct_read_com,
+)
 
 
 class ImmediateExecutor:
@@ -137,6 +140,78 @@ def test_read_range_with_metadata_fallback_reads_direct_cells(book_path):
     assert values == ["A11", "B11", "A12", "B12"]
 
 
+def test_should_fallback_stratified_sampling_large_sparse_matrix():
+    """Large ranges probe across rows, not only the first blank cells."""
+    nrows, ncols = 100, 10
+    matrix = [[None] * ncols for _ in range(nrows)]
+    ws = MagicMock()
+
+    def _cell(r, c):
+        m = MagicMock()
+        m.Value2 = "x" if r >= 51 else None
+        return m
+
+    ws.Cells = MagicMock(side_effect=_cell)
+    assert _should_fallback_to_direct_read_com(ws, matrix, 1, 1, nrows, ncols) is True
+
+
+def test_should_fallback_no_trigger_when_direct_also_blank():
+    nrows, ncols = 100, 10
+    matrix = [[None] * ncols for _ in range(nrows)]
+    ws = MagicMock()
+    ws.Cells = MagicMock(return_value=MagicMock(Value2=None))
+    assert _should_fallback_to_direct_read_com(ws, matrix, 1, 1, nrows, ncols) is False
+
+
+def test_should_fallback_small_range_row_major():
+    matrix = [[None, None], [None, None]]
+    ws = MagicMock()
+    vals = {(1, 1): "a", (1, 2): "b", (2, 1): "c", (2, 2): "d"}
+    ws.Cells = MagicMock(side_effect=lambda r, c: MagicMock(Value2=vals[(r, c)]))
+    assert _should_fallback_to_direct_read_com(ws, matrix, 1, 1, 2, 2) is True
+
+
+def test_read_range_large_sparse_matrix_fallback(book_path):
+    """Integration: bulk Value2 all-null on a large range falls back to direct reads."""
+    nrows, ncols = 80, 5
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Value2 = tuple([tuple([None] * ncols) for _ in range(nrows)])
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = nrows
+    used.Columns.Count = ncols
+    ws.UsedRange = used
+
+    cells: dict[tuple[int, int], MagicMock] = {}
+    for ir in range(nrows):
+        for ic in range(ncols):
+            r, c = ir + 1, ic + 1
+            cell = MagicMock()
+            cell.Validation = MagicMock()
+            cell.Validation.Type = 0
+            cell.Value2 = f"R{r}C{c}" if ir >= nrows // 2 else None
+            cells[(r, c)] = cell
+    cells[(1, 1)].Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(side_effect=lambda r, c: cells[(r, c)])
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.read_range_with_metadata(book_path, "Sheet1", "A1", "E80")
+
+    data = json.loads(raw)
+    populated = [c for c in data["cells"] if c["value"] is not None]
+    assert len(populated) == (nrows // 2) * ncols
+    assert populated[0]["value"] == "R41C1"
+
+
 def _read_range_fixture(
     book_path: str,
     *,
@@ -145,6 +220,7 @@ def _read_range_fixture(
     used_rows: int = 1,
     used_cols: int = 1,
     value_mode: str = "value",
+    metadata_mode: str = "full",
     end_cell: str = "A1",
 ) -> str:
     ws = MagicMock()
@@ -164,7 +240,12 @@ def _read_range_fixture(
     with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
         svc = ComWorkbookService(ImmediateExecutor())
         return svc.read_range_with_metadata(
-            book_path, "Sheet1", "A1", end_cell, value_mode=value_mode
+            book_path,
+            "Sheet1",
+            "A1",
+            end_cell,
+            value_mode=value_mode,
+            metadata_mode=metadata_mode,
         )
 
 
@@ -199,6 +280,39 @@ def test_read_range_with_metadata_invalid_value_mode_returns_error(book_path):
         )
     assert msg.startswith("Error:")
     assert "Invalid value_mode" in msg
+
+
+def test_read_range_with_metadata_invalid_metadata_mode_returns_error(book_path):
+    with patch.dict(sys.modules, _fake_win32_modules(MagicMock()), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", metadata_mode="sparse"
+        )
+    assert msg.startswith("Error:")
+    assert "Invalid metadata_mode" in msg
+
+
+def test_read_range_with_metadata_compact_omits_validation(book_path):
+    rng = MagicMock()
+    rng.Value2 = "yes"
+
+    cell = MagicMock()
+    cell.Value2 = "yes"
+    cell.Text = "yes"
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 3
+    cell.Validation.IgnoreBlank = True
+    cell.Validation.Formula1 = '"yes,no"'
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+        metadata_mode="compact",
+    )
+    data = json.loads(raw)
+    assert data["metadata_mode"] == "compact"
+    assert "validation" not in data["cells"][0]
 
 
 def test_read_range_with_metadata_text_mode_multi_cell(book_path):
@@ -677,6 +791,87 @@ def test_list_open_workbooks_no_running_excel():
         msg = svc.list_open_workbooks()
 
     assert msg == "Error: No running Excel application found"
+
+
+def test_list_open_workbooks_active_context(tmp_path):
+    p1 = str((tmp_path / "a.xlsx").resolve())
+    wb1 = MagicMock()
+    wb1.FullName = p1
+    wb1.Name = "a.xlsx"
+    active = MagicMock()
+    active.Name = "Sheet1"
+
+    xl = MagicMock()
+    xl.ActiveWorkbook = wb1
+    xl.ActiveSheet = active
+    xl.Selection = MagicMock()
+    xl.Selection.Address = "$B$2:$D$5"
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb1)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.list_open_workbooks(detail="active_context")
+
+    data = json.loads(raw)
+    assert data["active_workbook"] == {"full_name": p1, "name": "a.xlsx"}
+    assert data["active_sheet"] == "Sheet1"
+    assert data["selection"] == "B2:D5"
+    assert len(data["workbooks"]) == 1
+    assert data["workbooks"][0]["is_active"] is True
+
+
+def test_list_open_workbooks_active_context_no_active_workbook():
+    xl = MagicMock()
+    xl.ActiveWorkbook = None
+    xl.ActiveSheet = None
+    xl.Selection = None
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 0
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.list_open_workbooks(detail="active_context")
+
+    data = json.loads(raw)
+    assert data["active_workbook"] is None
+    assert data["active_sheet"] is None
+    assert data["selection"] is None
+    assert data["workbooks"] == []
+
+
+def test_list_open_workbooks_invalid_detail():
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 0
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.list_open_workbooks(detail="full")
+
+    assert msg.startswith("Error:")
+    assert "active_context" in msg
+
+
+def test_list_open_workbooks_default_detail_is_minimal(tmp_path):
+    p1 = str((tmp_path / "a.xlsx").resolve())
+    wb1 = MagicMock()
+    wb1.FullName = p1
+    wb1.Name = "a.xlsx"
+
+    xl = MagicMock()
+    xl.ActiveWorkbook = wb1
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb1)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.list_open_workbooks()
+
+    data = json.loads(raw)
+    assert set(data.keys()) == {"workbooks"}
 
 
 def test_evaluate_range_whole_sheet(book_path):

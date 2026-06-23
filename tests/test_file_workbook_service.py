@@ -14,6 +14,10 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from excel_mcp.routing.file_workbook_service import FileWorkbookService  # noqa: E402
+from excel_mcp.routing.routed_dispatch import (  # noqa: E402
+    FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
+    file_backend_formula_not_evaluated_warning,
+)
 from excel_mcp.routing.workbook_operation_contract import (  # noqa: E402
     ROUTED_WORKBOOK_OPERATION_NAMES,
 )
@@ -24,6 +28,52 @@ def test_file_workbook_service_has_all_routed_operation_names() -> None:
     for name in ROUTED_WORKBOOK_OPERATION_NAMES:
         assert hasattr(svc, name), name
         assert callable(getattr(svc, name)), name
+
+
+def test_read_range_with_metadata_xlsm_formula_emits_warning(tmp_path) -> None:
+    p = tmp_path / "macros.xlsm"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "=1+1"
+    wb.save(p)
+    path = str(p.resolve())
+
+    warnings: list = []
+    svc = FileWorkbookService()
+    raw = svc.read_range_with_metadata(
+        path,
+        "Sheet1",
+        "A1",
+        "A1",
+        operation_metadata={"_response_warnings": warnings},
+    )
+    data = json.loads(raw)
+    assert data["cells"][0]["address"] == "A1"
+    assert len(warnings) == 1
+    assert warnings[0]["code"] == FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE
+    assert warnings[0] == file_backend_formula_not_evaluated_warning()
+
+
+def test_read_range_with_metadata_xlsx_formula_no_warning(tmp_path) -> None:
+    p = tmp_path / "plain.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "=1+1"
+    wb.save(p)
+    path = str(p.resolve())
+
+    warnings: list = []
+    svc = FileWorkbookService()
+    svc.read_range_with_metadata(
+        path,
+        "Sheet1",
+        "A1",
+        "A1",
+        operation_metadata={"_response_warnings": warnings},
+    )
+    assert warnings == []
 
 
 @patch("excel_mcp.routing.file_workbook_service.read_excel_range_with_metadata")
@@ -38,7 +88,13 @@ def test_read_range_with_metadata_json(mock_read: MagicMock) -> None:
     svc = FileWorkbookService()
     out = svc.read_range_with_metadata("/abs/book.xlsx", "S", "A1", "A1")
     mock_read.assert_called_once_with(
-        "/abs/book.xlsx", "S", "A1", "A1", value_mode="value"
+        "/abs/book.xlsx",
+        "S",
+        "A1",
+        "A1",
+        value_mode="value",
+        metadata_mode="full",
+        file_backend_warnings=None,
     )
     assert json.loads(out) == payload
     assert out.startswith("{")

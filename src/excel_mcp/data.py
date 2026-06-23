@@ -9,6 +9,9 @@ from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 
+from excel_mcp.routing.routed_dispatch import file_backend_formula_not_evaluated_warning
+from excel_mcp.routing.read_value_mode import validate_metadata_mode
+
 from .exceptions import DataError
 from .cell_utils import parse_cell_range
 from .cell_validation import get_data_validation_for_cell
@@ -16,6 +19,45 @@ from .cell_validation import get_data_validation_for_cell
 logger = logging.getLogger(__name__)
 
 DEFAULT_EXPORT_MAX_ROWS = 10000
+
+
+def is_xlsm_workbook(filepath: Path | str) -> bool:
+    """True when ``filepath`` uses the macro-enabled ``.xlsm`` extension."""
+    return str(filepath).lower().endswith(".xlsm")
+
+
+def worksheet_range_has_formulas(
+    ws: Worksheet,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> bool:
+    """Return whether any cell in the rectangular range stores a formula."""
+    for row in range(start_row, end_row + 1):
+        for col in range(start_col, end_col + 1):
+            cell = ws.cell(row=row, column=col)
+            if cell.data_type == "f":
+                return True
+            val = cell.value
+            if isinstance(val, str) and val.startswith("="):
+                return True
+    return False
+
+
+def _maybe_append_file_backend_formula_warning(
+    filepath: Path | str,
+    ws: Worksheet,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+    file_backend_warnings: List[Dict[str, str]] | None,
+) -> None:
+    if file_backend_warnings is None or not is_xlsm_workbook(filepath):
+        return
+    if worksheet_range_has_formulas(ws, start_row, start_col, end_row, end_col):
+        file_backend_warnings.append(file_backend_formula_not_evaluated_warning())
 
 
 def _normalize_export_max_rows(max_rows: int | None) -> int:
@@ -126,9 +168,8 @@ def read_excel_range(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    preview_only: bool = False
 ) -> List[Dict[str, Any]]:
-    """Read data from Excel range with optional preview mode"""
+    """Read data from Excel range."""
     try:
         wb = load_workbook(filepath, read_only=False)
         
@@ -281,9 +322,10 @@ def read_excel_range_with_metadata(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    include_validation: bool = True,
     *,
     value_mode: str = "value",
+    metadata_mode: str = "full",
+    file_backend_warnings: List[Dict[str, str]] | None = None,
 ) -> Dict[str, Any]:
     """Read data from Excel range with cell metadata including validation rules.
     
@@ -292,12 +334,16 @@ def read_excel_range_with_metadata(
         sheet_name: Name of worksheet
         start_cell: Starting cell address
         end_cell: Ending cell address (optional)
-        include_validation: Whether to include validation metadata
         value_mode: ``value`` (raw ``cell.value``) or ``text`` (best-effort display string)
+        metadata_mode: ``full`` (per-cell validation metadata) or ``compact`` (omit validation)
+        file_backend_warnings: Optional mutable list; when reading ``.xlsm`` with formulas,
+            appends ADR 0010 ``file_backend_formula_not_evaluated`` warning entries.
 
     Returns:
         Dictionary containing structured cell data with metadata
     """
+    metadata_mode = validate_metadata_mode(metadata_mode)
+    include_validation = metadata_mode == "full"
     try:
         wb = load_workbook(filepath, read_only=False)
         
@@ -353,8 +399,19 @@ def read_excel_range_with_metadata(
                 "range": f"{start_cell}:",
                 "sheet_name": sheet_name,
                 "value_mode": value_mode,
+                "metadata_mode": metadata_mode,
                 "cells": [],
             }
+
+        _maybe_append_file_backend_formula_warning(
+            filepath,
+            ws,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+            file_backend_warnings,
+        )
 
         # Build structured cell data
         range_str = f"{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{end_row}"
@@ -362,6 +419,7 @@ def read_excel_range_with_metadata(
             "range": range_str,
             "sheet_name": sheet_name,
             "value_mode": value_mode,
+            "metadata_mode": metadata_mode,
             "cells": [],
         }
         
