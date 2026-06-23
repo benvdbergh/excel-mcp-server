@@ -30,6 +30,7 @@ from excel_mcp.routing import (
     get_tool_kind,
     resolve_workbook_transport,
 )
+from excel_mcp.routing.routed_dispatch import build_routed_response_envelope
 from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 from excel_mcp.routing.routing_errors import (
     ComExecutionNotImplementedError,
@@ -96,6 +97,8 @@ def _workbook_dispatch(
     workbook_transport: Optional[str],
     do_op: Callable[[str], str],
     com_do_op: Callable[[str], str] | None = None,
+    *,
+    include_routing_metadata: bool = False,
 ) -> str:
     """Resolve path, route transport, run one contract op."""
     full_path = get_excel_path(filepath)
@@ -106,7 +109,7 @@ def _workbook_dispatch(
     com_callable: Callable[[], str] | None = None
     if _COM_WORKBOOK_SERVICE is not None and com_do_op is not None:
         com_callable = lambda: com_do_op(full_path)
-    out, _backend = execute_routed_workbook_operation(
+    out, _backend, routing_meta = execute_routed_workbook_operation(
         _ROUTING_BACKEND,
         _FILE_WORKBOOK_SERVICE,
         resolved_path=full_path,
@@ -118,6 +121,8 @@ def _workbook_dispatch(
         com_operation_callable=com_callable,
         mcp_tool_name=mcp_tool_name,
     )
+    if include_routing_metadata:
+        return build_routed_response_envelope(out, routing_meta)
     return out
 
 
@@ -361,20 +366,26 @@ def read_data_from_excel(
     end_cell: Optional[str] = None,
     preview_only: bool = False,
     workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
     
     Args:
-        filepath: Path to Excel file
+        filepath: Path to Excel file, or exact https SharePoint-style URL matching
+            Excel Workbook.FullName when using COM (see excel_list_open_workbooks).
         sheet_name: Name of worksheet
         start_cell: Starting cell (default A1)
         end_cell: Ending cell (optional, auto-expands if not provided)
         preview_only: Whether to return preview only
+        workbook_transport: Workbook execution mode (auto, file, com)
+        include_routing_metadata: When true, wrap JSON in ADR 0010 envelope with
+            _meta (workbook_transport, workbook_backend, routing_reason, duration_ms)
     
     Returns:  
     JSON string containing structured cell data with validation metadata.
     Each cell includes: address, value, row, column, and validation info (if any).
+    When include_routing_metadata is true, the payload is wrapped per ADR 0010.
     """
     try:
         return _workbook_dispatch(
@@ -397,6 +408,7 @@ def read_data_from_excel(
                     preview_only,
                 )
             ),
+            include_routing_metadata=include_routing_metadata,
         )
     except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"

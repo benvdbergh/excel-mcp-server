@@ -7,19 +7,9 @@ so pywin32 is never touched from arbitrary threads (FR-10).
 
 from __future__ import annotations
 
-import numbers
-from typing import Any
-
 from excel_mcp.com_executor import ComThreadExecutor
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
-
-
-def _coerce_workbook_count(val: Any) -> int:
-    if isinstance(val, bool):
-        return 0
-    if isinstance(val, numbers.Integral):
-        return int(val)
-    return 0
+from excel_mcp.routing.workbook_host_identity import count_workbook_collection_matches
 
 
 def _count_workbook_matches_worker(resolved_path: str) -> int:
@@ -34,24 +24,7 @@ def _count_workbook_matches_worker(resolved_path: str) -> int:
         xl = win32com.client.GetActiveObject("Excel.Application")
     except Exception:
         return 0
-    try:
-        n = _coerce_workbook_count(getattr(xl.Workbooks, "Count", 0))
-    except Exception:
-        n = 0
-    matches = 0
-    for i in range(1, n + 1):
-        try:
-            wb = xl.Workbooks.Item(i)
-            full = str(wb.FullName)
-        except Exception:
-            continue
-        try:
-            norm_full = normalize_workbook_target_for_com(full)
-        except ValueError:
-            continue
-        if norm_full == target:
-            matches += 1
-    return matches
+    return count_workbook_collection_matches(xl, target)
 
 
 class ComWorkbookOpenInExcel:

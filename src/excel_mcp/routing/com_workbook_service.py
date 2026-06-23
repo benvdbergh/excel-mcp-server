@@ -13,13 +13,17 @@ import os
 import re
 import uuid
 from typing import Any, Dict, List, Mapping, Optional, Tuple
-from urllib.parse import urljoin
 
 from openpyxl.utils import get_column_letter
 
 from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
+from excel_mcp.routing.workbook_host_identity import (
+    normalized_workbook_fullname,
+    protected_view_candidate_paths,
+    workbook_in_protected_view,
+)
 
 _COM_NOT_IMPLEMENTED = "Error: COM path not implemented for this operation yet"
 
@@ -94,41 +98,7 @@ def _com_bool_is_true(val: Any) -> bool:
 
 
 def _workbook_fullname_norm(wb: Any) -> Optional[str]:
-    try:
-        return normalize_workbook_target_for_com(str(wb.FullName))
-    except Exception:
-        return None
-
-
-def _protected_view_candidate_paths(pv: Any) -> list[str]:
-    """Paths to compare to ``target`` for a Protected View window (COM object)."""
-    out: list[str] = []
-    try:
-        wb = pv.Workbook
-        fn = _workbook_fullname_norm(wb)
-        if fn:
-            out.append(fn)
-    except Exception:
-        pass
-    try:
-        sp, sn = str(pv.SourcePath), str(pv.SourceName)
-        if sp and sn:
-            sps = sp.strip()
-            if sps.lower().startswith("https://"):
-                base = sp if sp.endswith("/") else sp + "/"
-                combined = urljoin(
-                    base, str(sn).replace("\\", "/").lstrip("/")
-                )
-                out.append(normalize_workbook_target_for_com(combined))
-            else:
-                out.append(
-                    normalize_workbook_target_for_com(os.path.join(sp, sn))
-                )
-        elif sp:
-            out.append(normalize_workbook_target_for_com(sp))
-    except Exception:
-        pass
-    return out
+    return normalized_workbook_fullname(wb)
 
 
 def _hex_to_bgr_int(color: str) -> int:
@@ -461,26 +431,6 @@ class ComWorkbookService:
         return _COM_NOT_IMPLEMENTED
 
     @staticmethod
-    def _workbook_in_protected_view(xl: Any, wb: Any) -> bool:
-        """True if ``wb`` is the workbook shown in a :class:`ProtectedViewWindow` (Excel COM)."""
-        want = _workbook_fullname_norm(wb)
-        try:
-            pvw = xl.ProtectedViewWindows
-            n = _coerce_com_count(getattr(pvw, "Count", 0))
-        except Exception:
-            return False
-        for i in range(1, n + 1):
-            try:
-                pv = pvw.Item(i)
-                pw = pv.Workbook
-                got = _workbook_fullname_norm(pw)
-                if want and got and want == got:
-                    return True
-            except Exception:
-                continue
-        return False
-
-    @staticmethod
     def _collect_workbooks_matching_path(xl: Any, target: str) -> List[Any]:
         """All open COM workbooks whose on-disk path equals ``target`` (normalized).
 
@@ -509,7 +459,7 @@ class ComWorkbookService:
         for i in range(1, n_pv + 1):
             try:
                 pv = pvw.Item(i)
-                for cand in _protected_view_candidate_paths(pv):
+                for cand in protected_view_candidate_paths(pv):
                     if cand == target:
                         matches.append(pv.Workbook)
                         break
@@ -574,7 +524,7 @@ class ComWorkbookService:
             return None, _ERR_COM_NOT_OPEN
 
         wb_com = matches[0]
-        if ComWorkbookService._workbook_in_protected_view(xl, wb_com):
+        if workbook_in_protected_view(xl, wb_com):
             return None, _ERR_COM_PROTECTED_VIEW
         try:
             if _com_bool_is_true(getattr(wb_com, "ReadOnly", False)):
