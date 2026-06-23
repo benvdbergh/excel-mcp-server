@@ -188,6 +188,48 @@ read_data_from_excel(
 - Failures still return plain `"Error: …"` strings (no envelope), even when `include_routing_metadata=true`.
 - Field names match NFR-3 / `excel-mcp.routing` log vocabulary ([ADR 0010](docs/architecture/adr/0010-mcp-tool-response-envelope.md)).
 
+### export_worksheet_table
+
+Bulk-read a worksheet as a compact table (header row + data rows). Prefer this over repeated `read_data_from_excel` calls when exporting large rectangular regions (e.g. >50 rows).
+
+```python
+export_worksheet_table(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str = "A1",
+    end_cell: str = None,
+    max_rows: int = 10000,
+    workbook_transport: str | None = None,
+) -> str
+```
+
+- `filepath`: Path to Excel file, or exact `https://` SharePoint-style URL matching Excel `Workbook.FullName` when using COM
+- `sheet_name`: Source worksheet name
+- `start_cell`: Starting cell (default `A1`); when `end_cell` is omitted, exports the sheet used range (file: openpyxl bounds; COM: `UsedRange`)
+- `end_cell`: Optional ending cell for a explicit rectangular range
+- `max_rows`: Cap on **data** rows returned (default `10000`); first row of the range is always treated as headers and is not counted toward this cap
+- `workbook_transport`: Workbook execution mode (`auto`, `file`, `com`)
+- Returns: JSON string with `sheet_name`, `range`, `headers`, `rows`, `row_count`, `truncated`, `max_rows`
+
+**Response shape:**
+
+```json
+{
+  "sheet_name": "Sheet1",
+  "range": "A1:F100",
+  "headers": ["Col1", "Col2"],
+  "rows": [["a", 1], ["b", 2]],
+  "row_count": 99,
+  "truncated": false,
+  "max_rows": 10000
+}
+```
+
+- `headers`: values from the first row of the exported range
+- `rows`: remaining rows as a compact matrix (no per-cell metadata)
+- `row_count`: total data rows in the range (excluding the header row), before truncation
+- `truncated`: `true` when `row_count` exceeds `max_rows` (response `rows` is capped)
+
 ## Formatting Operations
 
 ### format_range

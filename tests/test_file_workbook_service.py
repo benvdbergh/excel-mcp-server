@@ -184,3 +184,44 @@ def test_routing_package_exports_file_workbook_service() -> None:
     from excel_mcp.routing import FileWorkbookService as FWS  # noqa: E402
 
     assert FWS is FileWorkbookService
+
+
+def test_export_worksheet_table_file_backend(tmp_path) -> None:
+    p = tmp_path / "table.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["Col1", "Col2"])
+    ws.append(["a", 1])
+    ws.append(["b", 2])
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    data = json.loads(svc.export_worksheet_table(path, "Sheet1"))
+    assert data["sheet_name"] == "Sheet1"
+    assert data["headers"] == ["Col1", "Col2"]
+    assert data["rows"] == [["a", 1], ["b", 2]]
+    assert data["row_count"] == 2
+    assert data["truncated"] is False
+    assert data["max_rows"] == 10000
+
+
+def test_export_worksheet_table_max_rows_truncates(tmp_path) -> None:
+    p = tmp_path / "big.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["H"])
+    for i in range(5):
+        ws.append([i])
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    data = json.loads(svc.export_worksheet_table(path, "Sheet1", max_rows=2))
+    assert data["headers"] == ["H"]
+    assert len(data["rows"]) == 2
+    assert data["row_count"] == 5
+    assert data["truncated"] is True
+    assert data["max_rows"] == 2

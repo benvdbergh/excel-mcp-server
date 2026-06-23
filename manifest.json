@@ -33,6 +33,7 @@
     {"name": "get_workbook_metadata", "description": "Get workbook metadata and structure"},
     {"name": "write_data_to_excel", "description": "Write data to Excel cells"},
     {"name": "read_data_from_excel", "description": "Read data from Excel range; optional value_mode (value|text) for raw vs display text"},
+    {"name": "export_worksheet_table", "description": "Bulk export worksheet as compact table (headers + row matrix); optional max_rows cap"},
     {"name": "format_range", "description": "Apply formatting to cell range"},
     {"name": "merge_cells", "description": "Merge cells in a range"},
     {"name": "unmerge_cells", "description": "Unmerge previously merged cells"},

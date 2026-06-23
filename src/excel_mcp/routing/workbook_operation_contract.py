@@ -117,6 +117,19 @@ class WorkbookReadOperations(Protocol):
         """Syntax check without mutating the cell (MCP: ``validate_formula_syntax``)."""
         ...
 
+    def export_worksheet_table(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: str = "A1",
+        end_cell: Optional[str] = None,
+        max_rows: int = 10000,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Bulk table export: header row + data rows (MCP: ``export_worksheet_table``)."""
+        ...
+
 
 class WorkbookWriteOperations(Protocol):
     """Write-class and lifecycle operations routed to file or COM."""
@@ -398,6 +411,7 @@ class RoutedWorkbookOperations(WorkbookReadOperations, WorkbookWriteOperations, 
 
 ROUTED_WORKBOOK_OPERATION_NAMES: tuple[str, ...] = (
     "read_range_with_metadata",
+    "export_worksheet_table",
     "workbook_metadata",
     "read_merged_cell_ranges",
     "read_worksheet_data_validation",

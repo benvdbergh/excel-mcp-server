@@ -72,6 +72,25 @@ def test_read_data_from_excel_value_mode_file_backend(tmp_path: Path) -> None:
     assert data["cells"][0]["value"] == "100.00"
 
 
+def test_export_worksheet_table_file_routing(tmp_path: Path) -> None:
+    p = tmp_path / "route_export.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet"
+    ws.append(["Name", "Qty"])
+    ws.append(["item", 3])
+    wb.save(p)
+    path = str(p.resolve())
+
+    from excel_mcp import server as srv
+
+    out = srv.export_worksheet_table(path, "Sheet", workbook_transport="file")
+    data = json.loads(out)
+    assert data["headers"] == ["Name", "Qty"]
+    assert data["rows"] == [["item", 3]]
+    assert data["row_count"] == 1
+
+
 def test_write_path_file_backend(tmp_path: Path) -> None:
     p = tmp_path / "route_write.xlsx"
     Workbook().save(p)

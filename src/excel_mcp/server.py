@@ -426,6 +426,64 @@ def read_data_from_excel(
 
 @mcp.tool(
     annotations=ToolAnnotations(
+        title="Export Worksheet Table",
+        readOnlyHint=True,
+    ),
+)
+def export_worksheet_table(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str = "A1",
+    end_cell: Optional[str] = None,
+    max_rows: int = 10000,
+    workbook_transport: Optional[str] = None,
+) -> str:
+    """
+    Export worksheet data as a compact table (header row + data rows).
+
+    Args:
+        filepath: Path to Excel file, or exact https SharePoint-style URL matching
+            Excel Workbook.FullName when using COM (see excel_list_open_workbooks).
+        sheet_name: Name of worksheet
+        start_cell: Starting cell (default A1); used range when end_cell omitted
+        end_cell: Optional ending cell
+        max_rows: Maximum data rows returned (default 10000); sets truncated when exceeded
+        workbook_transport: Workbook execution mode (auto, file, com)
+
+    Returns:
+        JSON string with sheet_name, range, headers, rows, row_count, truncated, max_rows.
+        First row of the range is treated as column headers; remaining rows are data.
+    """
+    try:
+        return _workbook_dispatch(
+            "export_worksheet_table",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.export_worksheet_table(
+                fp,
+                sheet_name,
+                start_cell,
+                end_cell,
+                max_rows,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.export_worksheet_table(
+                    fp,
+                    sheet_name,
+                    start_cell,
+                    end_cell,
+                    max_rows,
+                )
+            ),
+        )
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error exporting worksheet table: {e}")
+        raise
+
+@mcp.tool(
+    annotations=ToolAnnotations(
         title="Write Data to Excel",
         destructiveHint=True,
     ),

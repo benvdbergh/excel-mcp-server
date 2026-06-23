@@ -18,6 +18,7 @@ from openpyxl.utils import get_column_letter
 
 from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
+from excel_mcp.data import DEFAULT_EXPORT_MAX_ROWS, build_worksheet_table_payload
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
 from excel_mcp.routing.read_value_mode import validate_value_mode
 from excel_mcp.routing.workbook_host_identity import (
@@ -771,6 +772,103 @@ class ComWorkbookService:
         if not range_data["cells"]:
             return "No data found in specified range"
         return json.dumps(range_data, indent=2, default=str)
+
+    def export_worksheet_table(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: str = "A1",
+        end_cell: Optional[str] = None,
+        max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        return self._executor.submit(
+            self._export_worksheet_table_com,
+            filepath,
+            sheet_name,
+            start_cell,
+            end_cell,
+            max_rows,
+        )
+
+    @staticmethod
+    def _export_worksheet_table_com(
+        filepath: str,
+        sheet_name: str,
+        start_cell: str,
+        end_cell: Optional[str],
+        max_rows: int,
+    ) -> str:
+        raw_start = start_cell.strip()
+        ec: Optional[str] = end_cell
+        if ":" in raw_start and ec is None:
+            parts = raw_start.split(":", 1)
+            raw_start, ec = parts[0].strip(), parts[1].strip()
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            srow, scol, _, _ = parse_cell_range(f"{raw_start}:{raw_start}")
+        except ValueError as e:
+            return f"Error: Invalid start cell format: {str(e)}"
+
+        uminr, uminc, umaxr, umaxc = _com_used_bounds(ws)
+        if ec is None:
+            if umaxr == 1 and umaxc == 1:
+                try:
+                    a1v = ws.Range("A1").Value2
+                except Exception:
+                    a1v = None
+                if a1v is None or a1v == "":
+                    erow, ecol = srow, scol
+                else:
+                    erow, ecol = umaxr, umaxc
+                    if raw_start.upper() == "A1":
+                        srow, scol = uminr, uminc
+            else:
+                erow, ecol = umaxr, umaxc
+                if raw_start.upper() == "A1":
+                    srow, scol = uminr, uminc
+        else:
+            try:
+                et = ec.strip() if ec else ""
+                erow, ecol, _, _ = parse_cell_range(f"{et}:{et}")
+            except ValueError as e:
+                return f"Error: Invalid end cell format: {str(e)}"
+
+        if srow > umaxr or scol > umaxc:
+            range_str = f"{get_column_letter(scol)}{srow}:"
+            payload = build_worksheet_table_payload(
+                sheet_name, range_str, [], max_rows=max_rows
+            )
+            return json.dumps(payload, indent=2, default=str)
+
+        range_str = (
+            f"{get_column_letter(scol)}{srow}:{get_column_letter(ecol)}{erow}"
+        )
+        nrows = erow - srow + 1
+        ncols = ecol - scol + 1
+        try:
+            top_left = ws.Cells(srow, scol)
+            rng = top_left.Resize(nrows, ncols)
+            matrix = _read_range_matrix_com(
+                ws, rng, srow, scol, nrows, ncols, value_mode="value"
+            )
+        except Exception as exc:
+            return f"Error: {exc}"
+
+        payload = build_worksheet_table_payload(
+            sheet_name, range_str, matrix, max_rows=max_rows
+        )
+        return json.dumps(payload, indent=2, default=str)
 
     def workbook_metadata(
         self,

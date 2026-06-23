@@ -15,6 +15,50 @@ from .cell_validation import get_data_validation_for_cell
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_EXPORT_MAX_ROWS = 10000
+
+
+def _normalize_export_max_rows(max_rows: int | None) -> int:
+    if max_rows is None:
+        return DEFAULT_EXPORT_MAX_ROWS
+    if max_rows < 1:
+        raise DataError("max_rows must be a positive integer")
+    return max_rows
+
+
+def build_worksheet_table_payload(
+    sheet_name: str,
+    range_str: str,
+    matrix: List[List[Any]],
+    *,
+    max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+) -> Dict[str, Any]:
+    """Build compact table JSON from a rectangular cell matrix (first row = headers)."""
+    cap = _normalize_export_max_rows(max_rows)
+    if not matrix:
+        return {
+            "sheet_name": sheet_name,
+            "range": range_str,
+            "headers": [],
+            "rows": [],
+            "row_count": 0,
+            "truncated": False,
+            "max_rows": cap,
+        }
+    headers = list(matrix[0])
+    data_rows = [list(row) for row in matrix[1:]]
+    total = len(data_rows)
+    truncated = total > cap
+    return {
+        "sheet_name": sheet_name,
+        "range": range_str,
+        "headers": headers,
+        "rows": data_rows[:cap],
+        "row_count": total,
+        "truncated": truncated,
+        "max_rows": cap,
+    }
+
 
 def _best_effort_number_format(value: int | float, fmt: str) -> str:
     """Format a numeric cell value using a subset of Excel ``number_format`` patterns."""
@@ -342,4 +386,80 @@ def read_excel_range_with_metadata(
         raise
     except Exception as e:
         logger.error(f"Failed to read Excel range with metadata: {e}")
+        raise DataError(str(e))
+
+
+def export_excel_worksheet_table(
+    filepath: Path | str,
+    sheet_name: str,
+    start_cell: str = "A1",
+    end_cell: Optional[str] = None,
+    max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+) -> Dict[str, Any]:
+    """Read worksheet range as a compact table (first row headers, rest data rows)."""
+    cap = _normalize_export_max_rows(max_rows)
+    try:
+        wb = load_workbook(filepath, read_only=False)
+
+        if sheet_name not in wb.sheetnames:
+            raise DataError(f"Sheet '{sheet_name}' not found")
+
+        ws = wb[sheet_name]
+
+        raw_start = start_cell
+        ec = end_cell
+        if ":" in raw_start:
+            parts = raw_start.split(":", 1)
+            raw_start, ec = parts[0].strip(), parts[1].strip() if ec is None else ec
+
+        try:
+            start_coords = parse_cell_range(f"{raw_start}:{raw_start}")
+            if not start_coords or not all(coord is not None for coord in start_coords[:2]):
+                raise DataError(f"Invalid start cell reference: {raw_start}")
+            start_row, start_col = start_coords[0], start_coords[1]
+        except ValueError as e:
+            raise DataError(f"Invalid start cell format: {str(e)}")
+
+        if ec:
+            try:
+                end_coords = parse_cell_range(f"{ec}:{ec}")
+                if not end_coords or not all(coord is not None for coord in end_coords[:2]):
+                    raise DataError(f"Invalid end cell reference: {ec}")
+                end_row, end_col = end_coords[0], end_coords[1]
+            except ValueError as e:
+                raise DataError(f"Invalid end cell format: {str(e)}")
+        else:
+            if ws.max_row == 1 and ws.max_column == 1 and ws.cell(1, 1).value is None:
+                end_row, end_col = start_row, start_col
+            else:
+                end_row, end_col = ws.max_row, ws.max_column
+                if raw_start.upper() == "A1":
+                    start_row, start_col = ws.min_row, ws.min_column
+
+        if start_row > ws.max_row or start_col > ws.max_column:
+            range_str = f"{get_column_letter(start_col)}{start_row}:"
+            wb.close()
+            return build_worksheet_table_payload(
+                sheet_name, range_str, [], max_rows=cap
+            )
+
+        range_str = (
+            f"{get_column_letter(start_col)}{start_row}:"
+            f"{get_column_letter(end_col)}{end_row}"
+        )
+        matrix: List[List[Any]] = []
+        for row in range(start_row, end_row + 1):
+            matrix.append(
+                [ws.cell(row=row, column=col).value for col in range(start_col, end_col + 1)]
+            )
+
+        wb.close()
+        return build_worksheet_table_payload(
+            sheet_name, range_str, matrix, max_rows=cap
+        )
+
+    except DataError:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export worksheet table: {e}")
         raise DataError(str(e))

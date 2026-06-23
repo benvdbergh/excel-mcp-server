@@ -20,7 +20,7 @@ from openpyxl import load_workbook
 from excel_mcp.calculations import apply_formula as apply_formula_impl
 from excel_mcp.cell_validation import get_all_validation_ranges
 from excel_mcp.chart import create_chart_in_sheet as create_chart_impl
-from excel_mcp.data import read_excel_range_with_metadata, write_data
+from excel_mcp.data import export_excel_worksheet_table, read_excel_range_with_metadata, write_data
 from excel_mcp.exceptions import (
     CalculationError,
     ChartError,
@@ -90,6 +90,32 @@ class FileWorkbookService:
             return json.dumps(result, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error reading data: {e}")
+            raise
+
+    def export_worksheet_table(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: str = "A1",
+        end_cell: Optional[str] = None,
+        max_rows: int = 10000,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        try:
+            result = export_excel_worksheet_table(
+                filepath,
+                sheet_name,
+                start_cell,
+                end_cell,
+                max_rows=max_rows,
+            )
+            return json.dumps(result, indent=2, default=str)
+        except DataError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error exporting worksheet table: {e}")
             raise
 
     def workbook_metadata(

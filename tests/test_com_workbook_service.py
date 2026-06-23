@@ -677,3 +677,69 @@ def test_list_open_workbooks_no_running_excel():
         msg = svc.list_open_workbooks()
 
     assert msg == "Error: No running Excel application found"
+
+
+def test_export_worksheet_table_com_backend(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Value2 = (("Col1", "Col2"), ("a", 1), ("b", 2))
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 3
+    used.Columns.Count = 2
+    ws.UsedRange = used
+
+    cell = MagicMock()
+    cell.Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(return_value=cell)
+
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.export_worksheet_table(book_path, "Sheet1")
+
+    data = json.loads(raw)
+    assert data["headers"] == ["Col1", "Col2"]
+    assert data["rows"] == [["a", 1], ["b", 2]]
+    assert data["row_count"] == 2
+    assert data["truncated"] is False
+
+
+def test_export_worksheet_table_com_truncates(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Value2 = (("H",), (0,), (1,), (2,))
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 4
+    used.Columns.Count = 1
+    ws.UsedRange = used
+
+    cell = MagicMock()
+    cell.Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(return_value=cell)
+
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.export_worksheet_table(book_path, "Sheet1", max_rows=2)
+
+    data = json.loads(raw)
+    assert data["headers"] == ["H"]
+    assert len(data["rows"]) == 2
+    assert data["row_count"] == 3
+    assert data["truncated"] is True
