@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file. The format is informal; align version bumps with [Semantic Versioning](https://semver.org/) and [docs/architecture/release-versioning-policy.md](docs/architecture/release-versioning-policy.md).
 
+## [Unreleased]
+
+### Added
+
+- **Routing metadata envelope (ADR 0010, BEN-120):** Optional `include_routing_metadata` on `read_data_from_excel`. When `true`, successful responses wrap the tool payload in `{ "result", "_meta", "warnings" }` with `workbook_transport`, `workbook_backend`, `routing_reason`, and `duration_ms`. Default `false` preserves legacy JSON parsers.
+
+### Docs
+
+- **ADR 0010** — MCP tool response envelope contract (BEN-151).
+- **TOOLS.md** — `include_routing_metadata` and `_meta` fields on `read_data_from_excel`.
+
 ## 0.4.1 — 2026-05-08
 
 ### Fixed

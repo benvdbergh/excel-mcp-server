@@ -145,16 +145,39 @@ read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: str = None,
-    preview_only: bool = False
+    preview_only: bool = False,
+    workbook_transport: str | None = None,
+    include_routing_metadata: bool = False,
 ) -> str
 ```
 
-- `filepath`: Path to Excel file
+- `filepath`: Path to Excel file, or exact `https://` SharePoint-style URL matching Excel `Workbook.FullName` when using COM (see `excel_list_open_workbooks`, ADR 0006)
 - `sheet_name`: Source worksheet name
 - `start_cell`: Starting cell (default: "A1")
 - `end_cell`: Optional ending cell
 - `preview_only`: Whether to return only a preview
-- Returns: String representation of data
+- `workbook_transport`: Workbook execution mode (`auto`, `file`, `com`)
+- `include_routing_metadata`: When `true`, wrap successful JSON in the ADR 0010 envelope (see below). Default `false` for backward compatibility.
+- Returns: JSON string with per-cell metadata (validation rules when present)
+
+**Routing metadata envelope (ADR 0010):** When `include_routing_metadata=true`, the tool returns:
+
+```json
+{
+  "result": { },
+  "_meta": {
+    "workbook_transport": "auto",
+    "workbook_backend": "com",
+    "routing_reason": "full_name_match",
+    "duration_ms": 12.345
+  },
+  "warnings": []
+}
+```
+
+- `_meta.workbook_backend` reflects the **executed** backend (`file` or `com`). Use it to verify COM routed reads after `workbook_transport=auto`.
+- Failures still return plain `"Error: …"` strings (no envelope), even when `include_routing_metadata=true`.
+- Field names match NFR-3 / `excel-mcp.routing` log vocabulary ([ADR 0010](docs/architecture/adr/0010-mcp-tool-response-envelope.md)).
 
 ## Formatting Operations
 

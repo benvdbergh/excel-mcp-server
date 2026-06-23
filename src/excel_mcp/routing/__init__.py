@@ -11,6 +11,7 @@ from excel_mcp.routing.com_workbook_service import ComWorkbookService
 from excel_mcp.routing.file_workbook_service import FileWorkbookService
 from excel_mcp.routing.mcp_contract_bridge import contract_operation_name_for_mcp_tool
 from excel_mcp.routing.routed_dispatch import (
+    build_routed_response_envelope,
     execute_routed_workbook_operation,
     redact_workbook_path_for_logs,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "EXCEL_MCP_TRANSPORT",
     "ComWorkbookService",
     "WorkbookBackend",
+    "build_routed_response_envelope",
     "contract_operation_name_for_mcp_tool",
     "effective_com_strict",
     "execute_routed_workbook_operation",
