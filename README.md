@@ -42,7 +42,7 @@ uv run hatch build
 uv run python -m twine check dist/*
 ```
 
-The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` in `pyproject.toml`). A legacy console entrypoint **`excel-mcp-server`** is also installed. **PyPI / registry** installs use **`uvx excel-com-mcp stdio`** (`manifest.json` → `server.mcp_config`); **local clone** installs use **`uv run --project … --extra com excel-com-mcp stdio`** ([`.cursor/mcp.json`](.cursor/mcp.json)).
+The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` in `pyproject.toml`). A legacy console entrypoint **`excel-mcp-server`** is also installed. **PyPI / registry** installs use a **pinned** `uvx excel-com-mcp==X.Y.Z stdio` (`manifest.json` → `server.mcp_config`); **local clone** installs use **`uv run --project … --extra com excel-com-mcp stdio`** ([`.cursor/mcp.json`](.cursor/mcp.json)). See [Install decision matrix](#install-decision-matrix).
 
 ## Operator documentation map
 
@@ -52,7 +52,7 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 | **[`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md)** | **SSOT** registry: Cursor agent ids (`user-excel`, `user-excel-local`), `mcp.json` keys (`excel`, `excel-local`), PyPI vs fork |
 | **[`TOOLS.md`](TOOLS.md)** | Per-tool reference; same `filepath` and `workbook_transport` rules apply to every workbook tool |
 | **Host MCP tool schemas** | Before the first Excel MCP call in a session, inspect host tool descriptors for **`filepath`**, **`workbook_transport`**, and **`sheet_name`**; full contract in [`TOOLS.md`](TOOLS.md) |
-| **`manifest.json`** | MCP catalog metadata; `mcp_config` for PyPI/registry (`uvx excel-com-mcp stdio`); local fork uses [`.cursor/mcp.json`](.cursor/mcp.json) (see [Stdio Transport](#1-stdio-transport-for-local-use)) |
+| **`manifest.json`** | MCP catalog metadata; `mcp_config` for pinned PyPI/registry (`uvx excel-com-mcp==X.Y.Z stdio`); local fork uses [`.cursor/mcp.json`](.cursor/mcp.json) (see [Install decision matrix](#install-decision-matrix)) |
 | **[`.cursor/mcp.json`](.cursor/mcp.json)** | **Local-clone SSOT:** `excel-local` server with `${workspaceFolder}`, Windows COM extra, and operator env (see [MCP server ids](docs/operator/mcp-server-ids.md) and [Local clone in Cursor](#local-clone-in-cursor-this-repo)) |
 | **[`CHANGELOG.md`](CHANGELOG.md)** | Version-to-version release notes and breaking changes |
 | **[`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md)** | Epic/story delivery status for workbook routing |
@@ -71,10 +71,49 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 
 The server supports three transport methods:
 
+### Install decision matrix
+
+| Channel | When | COM support |
+| ------- | ---- | ----------- |
+| **Local fork** (`uv run --project … --extra com`) | Active development, SharePoint COM, fork fixes | Yes |
+| **PyPI** (`uvx excel-com-mcp==X.Y.Z`) | Casual / file-only workflows | Requires `[com]` extra on Windows (`pip install excel-com-mcp[com]` or `uv run --extra com`) |
+| **Consumer workspace** (e.g. Ai-Vault) | Project-scoped sessions | Pin absolute fork path + tenant `EXCEL_MCP_ALLOWED_URL_PREFIXES` |
+
+**Recommended default for COM workflows:** local fork with `--project` pointing at this repo and `--extra com` on Windows (see [Local clone in Cursor](#local-clone-in-cursor-this-repo)).
+
+> **Legacy (deprecated):** Global unpinned **`uvx excel-com-mcp@latest stdio`** (or bare `uvx excel-com-mcp stdio` without a version pin) drifts from fork fixes and is unsuitable for SharePoint COM. Migrate to the local fork pattern:
+
+```json
+{
+  "mcpServers": {
+    "excel-local": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "C:/Users/YOU/mcp/excel-mcp-server",
+        "--extra",
+        "com",
+        "excel-com-mcp",
+        "stdio"
+      ],
+      "env": {
+        "EXCEL_MCP_TRANSPORT": "auto",
+        "EXCEL_MCP_ALLOWED_URL_PREFIXES": "https://YOUR-TENANT.sharepoint.com/"
+      }
+    }
+  }
+}
+```
+
+For file-only PyPI use without a clone, pin an explicit version: `uvx excel-com-mcp==0.5.0 stdio`.
+
 ### 1. Stdio Transport (for local use)
 
+**PyPI (pinned, file-oriented):**
+
 ```bash
-uvx excel-com-mcp stdio
+uvx excel-com-mcp==0.5.0 stdio
 ```
 
 ```json
@@ -82,11 +121,13 @@ uvx excel-com-mcp stdio
    "mcpServers": {
       "excel": {
          "command": "uvx",
-         "args": ["excel-com-mcp", "stdio"]
+         "args": ["excel-com-mcp==0.5.0", "stdio"]
       }
    }
 }
 ```
+
+> Unpinned `uvx excel-com-mcp stdio` / `@latest` is **legacy** — see [Install decision matrix](#install-decision-matrix).
 
 Agent-visible server id: **`user-excel`**. See [`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md).
 

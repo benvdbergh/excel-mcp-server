@@ -4,14 +4,46 @@ All notable changes to this project are documented in this file. The format is i
 
 ## [Unreleased]
 
+## 0.5.0 — 2026-06-23
+
+Epics **1–4** (agent reliability, read fidelity, hardening, operator documentation): BEN-120 through BEN-140.
+
 ### Added
 
-- **Routing metadata envelope (ADR 0010, BEN-120):** Optional `include_routing_metadata` on `read_data_from_excel`. When `true`, successful responses wrap the tool payload in `{ "result", "_meta", "warnings" }` with `workbook_transport`, `workbook_backend`, `routing_reason`, and `duration_ms`. Default `false` preserves legacy JSON parsers.
+- **Routing metadata envelope (ADR 0010, BEN-120):** Optional `include_routing_metadata` on `read_data_from_excel`. When `true`, successful responses wrap the tool payload in `{ "result", "_meta", "warnings" }` with `workbook_transport`, `workbook_backend`, `routing_reason`, and `duration_ms`. Default `false` preserves legacy JSON parsers. Supersedes BEN-138 (duplicate).
+- **SharePoint open-detection (BEN-131):** Shared `workbook_host_identity` helpers align `FullName` normalization between COM open-detection and attach paths (ADR 0006); Protected View excluded from `auto`→COM until Enable Editing.
+- **Display-text reads (BEN-125, BEN-126):** COM `Range.Text` path when `value_mode=text`; optional `value_mode` on `read_data_from_excel` (`value` \| `text`, default `value`). Response echoes `value_mode` at root.
+- **Bulk read tool (BEN-130):** `export_worksheet_table` — compact header row + data matrix with optional `max_rows` cap and `truncated` flag; routes on file and COM backends.
+- **COM recalc tool (BEN-129):** `evaluate_range` forces Excel recalculation on sheet or range before reads; COM-only, does not persist to disk.
+- **Compact reads (BEN-136):** Optional `metadata_mode` (`full` \| `compact`) on `read_data_from_excel`; `compact` omits per-cell validation metadata (default `full`).
+- **Discovery detail levels (BEN-140):** `excel_list_open_workbooks` implements `detail` (`minimal` \| `active_context`); `active_context` adds active workbook, sheet, and selection (absorbs BEN-127).
+
+### Changed
+
+- **COM Value2 resiliency (BEN-133):** Wider sampling for large-range sparse `Value2` anomalies before per-cell direct-read fallback.
+
+### Breaking
+
+- **Schema cleanup (BEN-135):** Removed unused `preview_only` parameter from read tools. Clients that still pass `preview_only` must drop it.
+
+### Fixed
+
+- **`.xlsm` file-backend reads (BEN-134):** When the file backend reads formula cells on `.xlsm`, emit ADR 0010 warning `file_backend_formula_not_evaluated` (via `include_routing_metadata` envelope).
 
 ### Docs
 
-- **ADR 0010** — MCP tool response envelope contract (BEN-151).
-- **TOOLS.md** — `include_routing_metadata` and `_meta` fields on `read_data_from_excel`.
+- **ADR 0010 (BEN-151):** MCP tool response envelope contract.
+- **Operator documentation (BEN-132, BEN-137):** `read_data_from_excel` docstring and README hero aligned with COM-first routing, SharePoint `https://` locators, and discovery workflow.
+- **Install decision matrix (BEN-121):** README documents local fork vs pinned PyPI vs consumer workspace; global unpinned `uvx excel-com-mcp@latest` marked legacy with migration snippet.
+- **TOOLS.md** — `include_routing_metadata`, `_meta`, `value_mode`, `metadata_mode`, `export_worksheet_table`, `evaluate_range`, and `excel_list_open_workbooks` `detail`.
+
+### Tests
+
+- **SharePoint + formatted cells (BEN-139):** Mocked integration tests for `https` FullName routing and COM read fidelity (CI-safe without live Excel).
+
+### Operator
+
+- **Ai-Vault consumer pin (BEN-150):** Verified `excel-local` in `Ai-Vault/.cursor/mcp.json` pins `--project C:/Users/vandenbb/mcp/excel-mcp-server` with `EXCEL_MCP_ALLOWED_URL_PREFIXES` for `https://kion.sharepoint.com/` — no config change required for this release.
 
 ## 0.4.1 — 2026-05-08
 

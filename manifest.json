@@ -1,8 +1,8 @@
 {
   "manifest_version": "0.3",
   "name": "excel-com-mcp",
-  "version": "0.4.1",
-  "description": "Model Context Protocol server for Excel (.xlsx): openpyxl plus optional Windows COM. COM-first routing (auto/com) for reads and writes when Excel has the workbook open; file fallback or workbook_transport=file for on-disk snapshots. chart/pivot v1 file-forced (ADR 0004). Persistence: save_workbook only (no save_after_write). Discovery: excel_list_open_workbooks (COM; ADR 0009). Lifecycle: excel_open_workbook, excel_close_workbook (COM). Recalc: evaluate_range (COM-only). filepath: absolute local path, OR (stdio, COM) same https FullName as Excel. M365 auth is via Excel. With EXCEL_MCP_ALLOWED_PATHS, https needs EXCEL_MCP_ALLOWED_URL_PREFIXES. Local fork: uv run --project <repo> --extra com excel-com-mcp stdio (see mcp_config, .cursor/mcp.json). PyPI/registry: uvx excel-com-mcp stdio. See README, TOOLS.md.",
+  "version": "0.5.0",
+  "description": "Model Context Protocol server for Excel (.xlsx): openpyxl plus optional Windows COM. COM-first routing (auto/com) for reads and writes when Excel has the workbook open; file fallback or workbook_transport=file for on-disk snapshots. chart/pivot v1 file-forced (ADR 0004). Persistence: save_workbook only (no save_after_write). Discovery: excel_list_open_workbooks with detail=active_context (COM; ADR 0009). Lifecycle: excel_open_workbook, excel_close_workbook (COM). Recalc: evaluate_range (COM-only). Reads: value_mode, metadata_mode, include_routing_metadata (ADR 0010). Bulk: export_worksheet_table. filepath: absolute local path, OR (stdio, COM) same https FullName as Excel. M365 auth is via Excel. With EXCEL_MCP_ALLOWED_PATHS, https needs EXCEL_MCP_ALLOWED_URL_PREFIXES. Recommended COM/SharePoint: local fork uv run --project <repo> --extra com excel-com-mcp stdio (.cursor/mcp.json). mcp_config below is PyPI/registry default (pin uvx excel-com-mcp==X.Y.Z for casual file-only). See README install decision matrix, TOOLS.md.",
   "author": {
     "name": "haris",
     "url": "https://github.com/benvdbergh"
@@ -20,7 +20,7 @@
     "entry_point": "src/excel_mcp/__main__.py",
     "mcp_config": {
       "command": "uvx",
-      "args": ["excel-com-mcp", "stdio"]
+      "args": ["excel-com-mcp==0.5.0", "stdio"]
     }
   },
   "tools": [
