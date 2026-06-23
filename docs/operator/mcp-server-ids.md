@@ -2,13 +2,13 @@
 
 Single source of truth for **Excel MCP** server names in Cursor and related configs. The **office-xlsx** skill references this table — do not duplicate it in skill files.
 
-**Package:** PyPI distribution **`excel-com-mcp`** (`manifest.json` → `uvx excel-com-mcp stdio`).
+**Package:** PyPI distribution **`excel-com-mcp`** (`manifest.json` → pinned `uvx excel-com-mcp==0.5.0 stdio`; see [README install decision matrix](../../README.md#install-decision-matrix)).
 
 ## Registry
 
 | Agent server id | `mcp.json` key | Config pattern | Package | Notes |
 |-----------------|----------------|----------------|---------|-------|
-| **`user-excel`** | `excel` | `uvx excel-com-mcp stdio` | PyPI | Global default; Cursor prefixes user-configured servers with `user-` |
+| **`user-excel`** | `excel` | `uvx excel-com-mcp==0.5.0 stdio` | PyPI | Global default; pin version — unpinned `@latest` is legacy |
 | **`user-excel-local`** | `excel-local` | `uv run --project <fork> --extra com excel-com-mcp stdio` | Fork | Recommended for COM development and SharePoint allowlists |
 | *(same as row above)* | *(workspace)* | Same as `excel-local` | Fork | Cursor caches tool descriptors under `mcps/user-excel-local/` (`serverName`: `excel-local`) |
 
@@ -29,7 +29,7 @@ On Windows fork installs, pass **`--project`** with an absolute path to the repo
   "mcpServers": {
     "excel": {
       "command": "uvx",
-      "args": ["excel-com-mcp", "stdio"]
+      "args": ["excel-com-mcp==0.5.0", "stdio"]
     }
   }
 }
@@ -64,7 +64,7 @@ Optional: add `env` (e.g. `EXCEL_MCP_TRANSPORT`, `EXCEL_MCP_ALLOWED_URL_PREFIXES
 |------|-----------|----------------------|
 | **Global Cursor** (`~/.cursor/mcp.json`) | **`excel`** (PyPI `uvx`) + **`excel-local`** (fork) | `user-excel`, `user-excel-local` |
 | **excel-mcp-server workspace** | **`excel-local`** via project MCP when configured | `user-excel-local` |
-| **Ai-Vault project** | *None configured* (as of Epic 4) | — |
+| **Ai-Vault project** | **`excel-local`** fork pin (`C:/Users/vandenbb/mcp/excel-mcp-server`) + SharePoint URL prefix | `user-excel-local` |
 
 Prefer **`user-excel-local`** / **`excel-local`** when COM routing, fork fixes, or SharePoint URL allowlists matter. Use **`user-excel`** for quick PyPI-only file workflows without a local clone.
 
