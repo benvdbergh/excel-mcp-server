@@ -19,6 +19,7 @@ from openpyxl.utils import get_column_letter
 from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
+from excel_mcp.routing.read_value_mode import validate_value_mode
 from excel_mcp.routing.workbook_host_identity import (
     normalized_workbook_fullname,
     protected_view_candidate_paths,
@@ -642,6 +643,10 @@ class ComWorkbookService:
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         del operation_metadata
+        try:
+            validate_value_mode(value_mode)
+        except ValueError as e:
+            return f"Error: {e}"
         return self._executor.submit(
             self._read_range_with_metadata_com,
             filepath,
@@ -711,6 +716,7 @@ class ComWorkbookService:
                 {
                     "range": f"{get_column_letter(scol)}{srow}:",
                     "sheet_name": sheet_name,
+                    "value_mode": value_mode,
                     "cells": [],
                 },
                 indent=2,
@@ -723,6 +729,7 @@ class ComWorkbookService:
         range_data: Dict[str, Any] = {
             "range": range_str,
             "sheet_name": sheet_name,
+            "value_mode": value_mode,
             "cells": [],
         }
 

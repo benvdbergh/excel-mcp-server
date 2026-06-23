@@ -56,6 +56,8 @@ from excel_mcp.workbook import create_sheet as wb_create_sheet
 from excel_mcp.workbook import create_workbook as wb_create_workbook
 from excel_mcp.workbook import get_workbook_info
 
+from excel_mcp.routing.read_value_mode import validate_value_mode
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,13 +75,15 @@ class FileWorkbookService:
         value_mode: str = "value",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del preview_only, value_mode, operation_metadata
+        del preview_only, operation_metadata
+        validate_value_mode(value_mode)
         try:
             result = read_excel_range_with_metadata(
                 filepath,
                 sheet_name,
                 start_cell,
                 end_cell,
+                value_mode=value_mode,
             )
             if not result or not result.get("cells"):
                 return "No data found in specified range"

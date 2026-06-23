@@ -187,7 +187,18 @@ def test_read_range_with_metadata_text_mode_returns_display_text(book_path):
         value_mode="text",
     )
     data = json.loads(raw)
+    assert data["value_mode"] == "text"
     assert data["cells"][0]["value"] == "19,900.00 €"
+
+
+def test_read_range_with_metadata_invalid_value_mode_returns_error(book_path):
+    with patch.dict(sys.modules, _fake_win32_modules(MagicMock()), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", value_mode="formatted"
+        )
+    assert msg.startswith("Error:")
+    assert "Invalid value_mode" in msg
 
 
 def test_read_range_with_metadata_text_mode_multi_cell(book_path):
@@ -251,6 +262,7 @@ def test_read_range_with_metadata_value_mode_uses_value2(book_path):
         cells={(1, 1): cell},
     )
     data = json.loads(raw)
+    assert data["value_mode"] == "value"
     assert data["cells"][0]["value"] == 19900
 
 

@@ -1,8 +1,11 @@
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import logging
+import re
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 
@@ -11,6 +14,58 @@ from .cell_utils import parse_cell_range
 from .cell_validation import get_data_validation_for_cell
 
 logger = logging.getLogger(__name__)
+
+
+def _best_effort_number_format(value: int | float, fmt: str) -> str:
+    """Format a numeric cell value using a subset of Excel ``number_format`` patterns."""
+    fmt_part = fmt.split(";")[0]
+    prefix = ""
+    suffix = ""
+    core = fmt_part
+    for m in re.finditer(r'"([^"]*)"', fmt_part):
+        literal = m.group(1)
+        if m.start() < (fmt_part.find("0") if "0" in fmt_part else len(fmt_part)):
+            prefix += literal
+        else:
+            suffix += literal
+        core = core.replace(m.group(0), "")
+    if "%" in core:
+        pct = value * 100
+        if ".00" in core or "0.00" in core:
+            body = f"{pct:,.2f}" if "#,##" in core else f"{pct:.2f}"
+        elif ".0" in core:
+            body = f"{pct:,.1f}" if "#,##" in core else f"{pct:.1f}"
+        else:
+            body = f"{pct:,.0f}" if "#,##" in core else f"{pct:.0f}"
+        return f"{prefix}{body}%{suffix}"
+    if ".00" in core or "#,##0.00" in core:
+        body = f"{value:,.2f}" if "#,##" in core else f"{value:.2f}"
+    elif ".0" in core:
+        body = f"{value:,.1f}" if "#,##" in core else f"{value:.1f}"
+    elif "#,##" in core:
+        body = f"{value:,.0f}"
+    else:
+        body = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+    return f"{prefix}{body}{suffix}"
+
+
+def _cell_text_value(cell: Cell) -> Any:
+    """Best-effort displayed text for an openpyxl cell (weaker than Excel COM ``Range.Text``)."""
+    val = cell.value
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if isinstance(val, bool):
+        return "TRUE" if val else "FALSE"
+    if isinstance(val, (datetime, date, time)):
+        return val.isoformat(sep=" ")
+    fmt = cell.number_format or "General"
+    if fmt == "General":
+        return str(val)
+    if isinstance(val, (int, float)):
+        return _best_effort_number_format(val, fmt)
+    return str(val)
 
 def read_excel_range(
     filepath: Path | str,
@@ -172,7 +227,9 @@ def read_excel_range_with_metadata(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    include_validation: bool = True
+    include_validation: bool = True,
+    *,
+    value_mode: str = "value",
 ) -> Dict[str, Any]:
     """Read data from Excel range with cell metadata including validation rules.
     
@@ -182,7 +239,8 @@ def read_excel_range_with_metadata(
         start_cell: Starting cell address
         end_cell: Ending cell address (optional)
         include_validation: Whether to include validation metadata
-        
+        value_mode: ``value`` (raw ``cell.value``) or ``text`` (best-effort display string)
+
     Returns:
         Dictionary containing structured cell data with metadata
     """
@@ -237,24 +295,31 @@ def read_excel_range_with_metadata(
                 f"({get_column_letter(ws.min_column)}{ws.min_row}:{get_column_letter(ws.max_column)}{ws.max_row}). "
                 f"No data will be read."
             )
-            return {"range": f"{start_cell}:", "sheet_name": sheet_name, "cells": []}
+            return {
+                "range": f"{start_cell}:",
+                "sheet_name": sheet_name,
+                "value_mode": value_mode,
+                "cells": [],
+            }
 
         # Build structured cell data
         range_str = f"{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{end_row}"
         range_data = {
             "range": range_str,
             "sheet_name": sheet_name,
-            "cells": []
+            "value_mode": value_mode,
+            "cells": [],
         }
         
         for row in range(start_row, end_row + 1):
             for col in range(start_col, end_col + 1):
                 cell = ws.cell(row=row, column=col)
                 cell_address = f"{get_column_letter(col)}{row}"
+                cell_value = _cell_text_value(cell) if value_mode == "text" else cell.value
                 
                 cell_data = {
                     "address": cell_address,
-                    "value": cell.value,
+                    "value": cell_value,
                     "row": row,
                     "column": col
                 }

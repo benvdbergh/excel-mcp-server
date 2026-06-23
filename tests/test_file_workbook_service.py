@@ -5,6 +5,9 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+from openpyxl import Workbook
+
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
@@ -28,12 +31,15 @@ def test_read_range_with_metadata_json(mock_read: MagicMock) -> None:
     payload = {
         "range": "A1:A1",
         "sheet_name": "S",
+        "value_mode": "value",
         "cells": [{"address": "A1", "value": 1, "row": 1, "column": 1}],
     }
     mock_read.return_value = payload
     svc = FileWorkbookService()
     out = svc.read_range_with_metadata("/abs/book.xlsx", "S", "A1", "A1")
-    mock_read.assert_called_once_with("/abs/book.xlsx", "S", "A1", "A1")
+    mock_read.assert_called_once_with(
+        "/abs/book.xlsx", "S", "A1", "A1", value_mode="value"
+    )
     assert json.loads(out) == payload
     assert out.startswith("{")
 
@@ -43,6 +49,45 @@ def test_read_range_with_metadata_empty(mock_read: MagicMock) -> None:
     mock_read.return_value = {"cells": []}
     svc = FileWorkbookService()
     assert svc.read_range_with_metadata("/abs/b.xlsx", "S") == "No data found in specified range"
+
+
+def test_read_range_with_metadata_invalid_value_mode() -> None:
+    svc = FileWorkbookService()
+    with pytest.raises(ValueError, match="Invalid value_mode"):
+        svc.read_range_with_metadata("/abs/b.xlsx", "S", value_mode="display")
+
+
+def test_read_range_with_metadata_text_mode_file_backend(tmp_path) -> None:
+    p = tmp_path / "formatted.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = 19900
+    ws["A1"].number_format = "#,##0.00"
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    raw = svc.read_range_with_metadata(path, "Sheet1", "A1", "A1", value_mode="text")
+    data = json.loads(raw)
+    assert data["value_mode"] == "text"
+    assert data["cells"][0]["value"] == "19,900.00"
+    assert data["cells"][0]["value"] != 19900
+
+
+def test_read_range_with_metadata_default_echoes_value_mode(tmp_path) -> None:
+    p = tmp_path / "plain.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = 42
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    data = json.loads(svc.read_range_with_metadata(path, "Sheet1", "A1", "A1"))
+    assert data["value_mode"] == "value"
+    assert data["cells"][0]["value"] == 42
 
 
 @patch("excel_mcp.routing.file_workbook_service.get_all_validation_ranges")

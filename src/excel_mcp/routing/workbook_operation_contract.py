@@ -36,7 +36,8 @@ class WorkbookOperationMetadata(TypedDict, total=False):
         tool_kind: Read vs write vs v1-file-forced classification for routing.
         mcp_tool_name: Registered MCP tool function name for logs (wire name).
         operation_kind: Finer-grained label for metrics/logs (follow-up).
-        com_read_opt_in: Phase-2 opt-in for COM-backed reads per call/env.
+        com_read_opt_in: Deprecated. ADR 0008 superseded Phase-2 COM read opt-in;
+            COM-first reads are default when Excel has the workbook open.
     """
 
     tool_kind: str

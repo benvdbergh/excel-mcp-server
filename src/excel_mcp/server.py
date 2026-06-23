@@ -31,6 +31,7 @@ from excel_mcp.routing import (
     resolve_workbook_transport,
 )
 from excel_mcp.routing.routed_dispatch import build_routed_response_envelope
+from excel_mcp.routing.read_value_mode import validate_value_mode
 from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 from excel_mcp.routing.routing_errors import (
     ComExecutionNotImplementedError,
@@ -367,6 +368,7 @@ def read_data_from_excel(
     preview_only: bool = False,
     workbook_transport: Optional[str] = None,
     include_routing_metadata: bool = False,
+    value_mode: str = "value",
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
@@ -381,13 +383,17 @@ def read_data_from_excel(
         workbook_transport: Workbook execution mode (auto, file, com)
         include_routing_metadata: When true, wrap JSON in ADR 0010 envelope with
             _meta (workbook_transport, workbook_backend, routing_reason, duration_ms)
+        value_mode: ``value`` (raw cell values) or ``text`` (display text; COM uses
+            Range.Text; file backend is best-effort formatted string)
     
     Returns:  
     JSON string containing structured cell data with validation metadata.
     Each cell includes: address, value, row, column, and validation info (if any).
-    When include_routing_metadata is true, the payload is wrapped per ADR 0010.
+    Root JSON includes ``value_mode``. When include_routing_metadata is true, the
+    payload is wrapped per ADR 0010.
     """
     try:
+        validate_value_mode(value_mode)
         return _workbook_dispatch(
             "read_data_from_excel",
             filepath,
@@ -398,6 +404,7 @@ def read_data_from_excel(
                 start_cell,
                 end_cell,
                 preview_only,
+                value_mode=value_mode,
             ),
             com_do_op=_com_dispatch(
                 lambda c, fp: c.read_range_with_metadata(
@@ -406,6 +413,7 @@ def read_data_from_excel(
                     start_cell,
                     end_cell,
                     preview_only,
+                    value_mode=value_mode,
                 )
             ),
             include_routing_metadata=include_routing_metadata,

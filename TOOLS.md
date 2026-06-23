@@ -148,6 +148,7 @@ read_data_from_excel(
     preview_only: bool = False,
     workbook_transport: str | None = None,
     include_routing_metadata: bool = False,
+    value_mode: str = "value",
 ) -> str
 ```
 
@@ -158,7 +159,15 @@ read_data_from_excel(
 - `preview_only`: Whether to return only a preview
 - `workbook_transport`: Workbook execution mode (`auto`, `file`, `com`)
 - `include_routing_metadata`: When `true`, wrap successful JSON in the ADR 0010 envelope (see below). Default `false` for backward compatibility.
-- Returns: JSON string with per-cell metadata (validation rules when present)
+- `value_mode`: How cell values are returned — `"value"` (default, raw `Value2` / `cell.value`) or `"text"` (display text). Unknown values return an actionable error.
+- Returns: JSON string with per-cell metadata (validation rules when present). Root JSON includes `"value_mode"`.
+
+**`value_mode` and backends:**
+
+| `value_mode` | COM backend | File backend (openpyxl) |
+|--------------|-------------|-------------------------|
+| `"value"` (default) | `Range.Value2` | `cell.value` |
+| `"text"` | `Range.Text` (Excel display string) | Best-effort formatted string from `number_format`; **weaker fidelity** than COM — locale, conditional formats, and rich display rules are not reproduced. Prefer COM when exact display text matters. |
 
 **Routing metadata envelope (ADR 0010):** When `include_routing_metadata=true`, the tool returns:
 
