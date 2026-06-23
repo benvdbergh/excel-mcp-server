@@ -104,6 +104,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 ### 8. Observability
 
 - Every routed operation logs a single JSON line (INFO on logger `excel-mcp.routing`, no stdout) with ADR 0001–aligned fields including **`workbook_transport`**, **`workbook_backend`**, **`routing_reason`**, **`duration_ms`**, **`workbook_path`** (basename redaction by default; optional full path via env), **`operation_name`**, and optional **`mcp_tool_name`** (NFR-3). See `README.md` — *Routing observability*.
+- **MCP wire (opt-in):** routed tools may expose the same routing fields on successful responses via **`include_routing_metadata`** (default **`false`**) and a JSON envelope with **`_meta`** and **`warnings`** ([ADR 0010](adr/0010-mcp-tool-response-envelope.md)). Failures remain plain **`"Error: …"`** strings for compatibility.
 
 ### 9. Packaging, CI/CD, and releases
 
@@ -134,6 +135,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 ## Related documents
 
 - [ADR 0009 — Open workbook discovery tool](adr/0009-open-workbook-discovery-tool.md) — enumeration vs `get_workbook_metadata`
+- [ADR 0010 — MCP tool response envelope](adr/0010-mcp-tool-response-envelope.md) — opt-in `_meta`, warnings, SemVer
 - `docs/specs/PRD-excel-mcp-transport-routing.md` — requirements
 - `docs/excel-mcp-fork-com-vs-file-routing.md` — blueprint
 - `docs/architecture/pre-fork-architecture.md` — baseline
