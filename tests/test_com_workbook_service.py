@@ -137,6 +137,156 @@ def test_read_range_with_metadata_fallback_reads_direct_cells(book_path):
     assert values == ["A11", "B11", "A12", "B12"]
 
 
+def _read_range_fixture(
+    book_path: str,
+    *,
+    rng: MagicMock,
+    cells: dict[tuple[int, int], MagicMock],
+    used_rows: int = 1,
+    used_cols: int = 1,
+    value_mode: str = "value",
+    end_cell: str = "A1",
+) -> str:
+    ws = MagicMock()
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = used_rows
+    used.Columns.Count = used_cols
+    ws.UsedRange = used
+    cells[(1, 1)].Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(side_effect=lambda r, c: cells[(r, c)])
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        return svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", end_cell, value_mode=value_mode
+        )
+
+
+def test_read_range_with_metadata_text_mode_returns_display_text(book_path):
+    """Formatted currency cells return Range.Text, not raw Value2."""
+    rng = MagicMock()
+    rng.Text = "19,900.00 €"
+    rng.Value2 = 19900
+
+    cell = MagicMock()
+    cell.Text = "19,900.00 €"
+    cell.Value2 = 19900
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 0
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+        value_mode="text",
+    )
+    data = json.loads(raw)
+    assert data["value_mode"] == "text"
+    assert data["cells"][0]["value"] == "19,900.00 €"
+
+
+def test_read_range_with_metadata_invalid_value_mode_returns_error(book_path):
+    with patch.dict(sys.modules, _fake_win32_modules(MagicMock()), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", value_mode="formatted"
+        )
+    assert msg.startswith("Error:")
+    assert "Invalid value_mode" in msg
+
+
+def test_read_range_with_metadata_text_mode_multi_cell(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Text = "19,900.00 €"
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 1
+    used.Columns.Count = 2
+    ws.UsedRange = used
+
+    cells: dict[tuple[int, int], MagicMock] = {}
+    for coord, text, raw in [
+        ((1, 1), "19,900.00 €", 19900),
+        ((1, 2), "1,250.50 €", 1250.5),
+    ]:
+        cell = MagicMock()
+        cell.Text = text
+        cell.Value2 = raw
+        cell.Validation = MagicMock()
+        cell.Validation.Type = 0
+        cells[coord] = cell
+    cells[(1, 1)].Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(side_effect=lambda r, c: cells[(r, c)])
+
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", "B1", value_mode="text"
+        )
+
+    data = json.loads(raw)
+    values = [c["value"] for c in data["cells"]]
+    assert values == ["19,900.00 €", "1,250.50 €"]
+
+
+def test_read_range_with_metadata_value_mode_uses_value2(book_path):
+    """Default value_mode keeps Value2 reads (raw numbers, not display text)."""
+    rng = MagicMock()
+    rng.Value2 = 19900
+    rng.Text = "19,900.00 €"
+
+    cell = MagicMock()
+    cell.Value2 = 19900
+    cell.Text = "19,900.00 €"
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 0
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+    )
+    data = json.loads(raw)
+    assert data["value_mode"] == "value"
+    assert data["cells"][0]["value"] == 19900
+
+
+def test_read_range_with_metadata_text_mode_bulk_fallback(book_path):
+    """Bulk Range.Text sparsity on 1x1 triggers per-cell Text fallback."""
+    rng = MagicMock()
+    rng.Text = None
+
+    cell = MagicMock()
+    cell.Text = "19,900.00 €"
+    cell.Value2 = 19900
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 0
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+        value_mode="text",
+    )
+    data = json.loads(raw)
+    assert data["cells"][0]["value"] == "19,900.00 €"
+
+
 def test_save_workbook_invokes_save(book_path):
     wb = _workbook_mock(book_path, {})
     wb.Save = MagicMock()
@@ -527,3 +677,140 @@ def test_list_open_workbooks_no_running_excel():
         msg = svc.list_open_workbooks()
 
     assert msg == "Error: No running Excel application found"
+
+
+def test_evaluate_range_whole_sheet(book_path):
+    ws = MagicMock()
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range(book_path, "Sheet1")
+
+    ws.Calculate.assert_called_once()
+    assert "Recalculated sheet 'Sheet1'" in msg
+    assert "save_workbook" in msg
+
+
+def test_evaluate_range_cell_range(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    ws.Range = MagicMock(return_value=rng)
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range(book_path, "Sheet1", "A1", "B2")
+
+    ws.Range.assert_called_once_with("A1", "B2")
+    rng.Calculate.assert_called_once()
+    assert "range A1:B2" in msg
+
+
+def test_evaluate_range_workbook_not_open(book_path):
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 0
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range(book_path, "Sheet1")
+
+    assert msg.startswith("Error:") and "Workbook" in msg
+
+
+def test_evaluate_range_no_running_excel():
+    client_mod = types.ModuleType("win32com.client")
+    client_mod.GetActiveObject = MagicMock(side_effect=RuntimeError("RPC"))
+    pkg = types.ModuleType("win32com")
+    pkg.client = client_mod
+    modules = {"win32com": pkg, "win32com.client": client_mod}
+
+    with patch.dict(sys.modules, modules, clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range("C:\\fake\\book.xlsx", "Sheet1")
+
+    assert msg == "Error: No running Excel application found"
+
+
+def test_export_worksheet_table_com_backend(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Value2 = (("Col1", "Col2"), ("a", 1), ("b", 2))
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 3
+    used.Columns.Count = 2
+    ws.UsedRange = used
+
+    cell = MagicMock()
+    cell.Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(return_value=cell)
+
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.export_worksheet_table(book_path, "Sheet1")
+
+    data = json.loads(raw)
+    assert data["headers"] == ["Col1", "Col2"]
+    assert data["rows"] == [["a", 1], ["b", 2]]
+    assert data["row_count"] == 2
+    assert data["truncated"] is False
+
+
+def test_export_worksheet_table_com_truncates(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Value2 = (("H",), (0,), (1,), (2,))
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 4
+    used.Columns.Count = 1
+    ws.UsedRange = used
+
+    cell = MagicMock()
+    cell.Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(return_value=cell)
+
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.export_worksheet_table(book_path, "Sheet1", max_rows=2)
+
+    data = json.loads(raw)
+    assert data["headers"] == ["H"]
+    assert len(data["rows"]) == 2
+    assert data["row_count"] == 3
+    assert data["truncated"] is True
+    cell.Resize.assert_called_once_with(3, 1)
+
+
+def test_export_worksheet_table_com_invalid_max_rows(book_path):
+    with patch.dict(sys.modules, _fake_win32_modules(MagicMock()), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.export_worksheet_table(book_path, "Sheet1", max_rows=0)
+
+    assert raw == "Error: max_rows must be a positive integer"

@@ -36,7 +36,8 @@ class WorkbookOperationMetadata(TypedDict, total=False):
         tool_kind: Read vs write vs v1-file-forced classification for routing.
         mcp_tool_name: Registered MCP tool function name for logs (wire name).
         operation_kind: Finer-grained label for metrics/logs (follow-up).
-        com_read_opt_in: Phase-2 opt-in for COM-backed reads per call/env.
+        com_read_opt_in: Deprecated. ADR 0008 superseded Phase-2 COM read opt-in;
+            COM-first reads are default when Excel has the workbook open.
     """
 
     tool_kind: str
@@ -56,6 +57,7 @@ class WorkbookReadOperations(Protocol):
         end_cell: Optional[str] = None,
         preview_only: bool = False,
         *,
+        value_mode: str = "value",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         """Range read including per-cell validation metadata (MCP: ``read_data_from_excel``)."""
@@ -113,6 +115,19 @@ class WorkbookReadOperations(Protocol):
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         """Syntax check without mutating the cell (MCP: ``validate_formula_syntax``)."""
+        ...
+
+    def export_worksheet_table(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: str = "A1",
+        end_cell: Optional[str] = None,
+        max_rows: int = 10000,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Bulk table export: header row + data rows (MCP: ``export_worksheet_table``)."""
         ...
 
 
@@ -396,6 +411,7 @@ class RoutedWorkbookOperations(WorkbookReadOperations, WorkbookWriteOperations, 
 
 ROUTED_WORKBOOK_OPERATION_NAMES: tuple[str, ...] = (
     "read_range_with_metadata",
+    "export_worksheet_table",
     "workbook_metadata",
     "read_merged_cell_ranges",
     "read_worksheet_data_validation",

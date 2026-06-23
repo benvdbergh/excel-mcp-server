@@ -1,8 +1,11 @@
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import logging
+import re
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 
@@ -11,6 +14,112 @@ from .cell_utils import parse_cell_range
 from .cell_validation import get_data_validation_for_cell
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_EXPORT_MAX_ROWS = 10000
+
+
+def _normalize_export_max_rows(max_rows: int | None) -> int:
+    if max_rows is None:
+        return DEFAULT_EXPORT_MAX_ROWS
+    if max_rows < 1:
+        raise DataError("max_rows must be a positive integer")
+    return max_rows
+
+
+def _export_read_end_row(start_row: int, end_row: int, cap: int) -> int:
+    """Last row to read when exporting: header row plus up to ``cap`` data rows."""
+    if end_row < start_row:
+        return start_row
+    total_data_rows = end_row - start_row
+    return start_row + min(total_data_rows, cap)
+
+
+def build_worksheet_table_payload(
+    sheet_name: str,
+    range_str: str,
+    matrix: List[List[Any]],
+    *,
+    max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+    total_data_rows: int | None = None,
+) -> Dict[str, Any]:
+    """Build compact table JSON from a rectangular cell matrix (first row = headers)."""
+    cap = _normalize_export_max_rows(max_rows)
+    if not matrix:
+        total = 0 if total_data_rows is None else max(0, total_data_rows)
+        return {
+            "sheet_name": sheet_name,
+            "range": range_str,
+            "headers": [],
+            "rows": [],
+            "row_count": total,
+            "truncated": total > cap,
+            "max_rows": cap,
+        }
+    headers = list(matrix[0])
+    data_rows = [list(row) for row in matrix[1:]]
+    total = total_data_rows if total_data_rows is not None else len(data_rows)
+    truncated = total > cap
+    return {
+        "sheet_name": sheet_name,
+        "range": range_str,
+        "headers": headers,
+        "rows": data_rows[:cap],
+        "row_count": total,
+        "truncated": truncated,
+        "max_rows": cap,
+    }
+
+
+def _best_effort_number_format(value: int | float, fmt: str) -> str:
+    """Format a numeric cell value using a subset of Excel ``number_format`` patterns."""
+    fmt_part = fmt.split(";")[0]
+    prefix = ""
+    suffix = ""
+    core = fmt_part
+    for m in re.finditer(r'"([^"]*)"', fmt_part):
+        literal = m.group(1)
+        if m.start() < (fmt_part.find("0") if "0" in fmt_part else len(fmt_part)):
+            prefix += literal
+        else:
+            suffix += literal
+        core = core.replace(m.group(0), "")
+    if "%" in core:
+        pct = value * 100
+        if ".00" in core or "0.00" in core:
+            body = f"{pct:,.2f}" if "#,##" in core else f"{pct:.2f}"
+        elif ".0" in core:
+            body = f"{pct:,.1f}" if "#,##" in core else f"{pct:.1f}"
+        else:
+            body = f"{pct:,.0f}" if "#,##" in core else f"{pct:.0f}"
+        return f"{prefix}{body}%{suffix}"
+    if ".00" in core or "#,##0.00" in core:
+        body = f"{value:,.2f}" if "#,##" in core else f"{value:.2f}"
+    elif ".0" in core:
+        body = f"{value:,.1f}" if "#,##" in core else f"{value:.1f}"
+    elif "#,##" in core:
+        body = f"{value:,.0f}"
+    else:
+        body = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+    return f"{prefix}{body}{suffix}"
+
+
+def _cell_text_value(cell: Cell) -> Any:
+    """Best-effort displayed text for an openpyxl cell (weaker than Excel COM ``Range.Text``)."""
+    val = cell.value
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if isinstance(val, bool):
+        return "TRUE" if val else "FALSE"
+    if isinstance(val, (datetime, date, time)):
+        return val.isoformat(sep=" ")
+    fmt = cell.number_format or "General"
+    if fmt == "General":
+        return str(val)
+    if isinstance(val, (int, float)):
+        return _best_effort_number_format(val, fmt)
+    return str(val)
 
 def read_excel_range(
     filepath: Path | str,
@@ -172,7 +281,9 @@ def read_excel_range_with_metadata(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    include_validation: bool = True
+    include_validation: bool = True,
+    *,
+    value_mode: str = "value",
 ) -> Dict[str, Any]:
     """Read data from Excel range with cell metadata including validation rules.
     
@@ -182,7 +293,8 @@ def read_excel_range_with_metadata(
         start_cell: Starting cell address
         end_cell: Ending cell address (optional)
         include_validation: Whether to include validation metadata
-        
+        value_mode: ``value`` (raw ``cell.value``) or ``text`` (best-effort display string)
+
     Returns:
         Dictionary containing structured cell data with metadata
     """
@@ -225,7 +337,7 @@ def read_excel_range_with_metadata(
                 # Use the sheet's own boundaries, but respect the provided start_cell
                 end_row, end_col = ws.max_row, ws.max_column
                 # If start_cell is 'A1' (default), we should find the true start
-                if start_cell == 'A1':
+                if start_cell.upper() == "A1":
                     start_row, start_col = ws.min_row, ws.min_column
 
         # Validate range bounds
@@ -237,24 +349,31 @@ def read_excel_range_with_metadata(
                 f"({get_column_letter(ws.min_column)}{ws.min_row}:{get_column_letter(ws.max_column)}{ws.max_row}). "
                 f"No data will be read."
             )
-            return {"range": f"{start_cell}:", "sheet_name": sheet_name, "cells": []}
+            return {
+                "range": f"{start_cell}:",
+                "sheet_name": sheet_name,
+                "value_mode": value_mode,
+                "cells": [],
+            }
 
         # Build structured cell data
         range_str = f"{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{end_row}"
         range_data = {
             "range": range_str,
             "sheet_name": sheet_name,
-            "cells": []
+            "value_mode": value_mode,
+            "cells": [],
         }
         
         for row in range(start_row, end_row + 1):
             for col in range(start_col, end_col + 1):
                 cell = ws.cell(row=row, column=col)
                 cell_address = f"{get_column_letter(col)}{row}"
+                cell_value = _cell_text_value(cell) if value_mode == "text" else cell.value
                 
                 cell_data = {
                     "address": cell_address,
-                    "value": cell.value,
+                    "value": cell_value,
                     "row": row,
                     "column": col
                 }
@@ -277,4 +396,86 @@ def read_excel_range_with_metadata(
         raise
     except Exception as e:
         logger.error(f"Failed to read Excel range with metadata: {e}")
+        raise DataError(str(e))
+
+
+def export_excel_worksheet_table(
+    filepath: Path | str,
+    sheet_name: str,
+    start_cell: str = "A1",
+    end_cell: Optional[str] = None,
+    max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+) -> Dict[str, Any]:
+    """Read worksheet range as a compact table (first row headers, rest data rows)."""
+    cap = _normalize_export_max_rows(max_rows)
+    try:
+        wb = load_workbook(filepath, read_only=False)
+
+        if sheet_name not in wb.sheetnames:
+            raise DataError(f"Sheet '{sheet_name}' not found")
+
+        ws = wb[sheet_name]
+
+        raw_start = start_cell
+        ec = end_cell
+        if ":" in raw_start:
+            parts = raw_start.split(":", 1)
+            raw_start, ec = parts[0].strip(), parts[1].strip() if ec is None else ec
+
+        try:
+            start_coords = parse_cell_range(f"{raw_start}:{raw_start}")
+            if not start_coords or not all(coord is not None for coord in start_coords[:2]):
+                raise DataError(f"Invalid start cell reference: {raw_start}")
+            start_row, start_col = start_coords[0], start_coords[1]
+        except ValueError as e:
+            raise DataError(f"Invalid start cell format: {str(e)}")
+
+        if ec:
+            try:
+                end_coords = parse_cell_range(f"{ec}:{ec}")
+                if not end_coords or not all(coord is not None for coord in end_coords[:2]):
+                    raise DataError(f"Invalid end cell reference: {ec}")
+                end_row, end_col = end_coords[0], end_coords[1]
+            except ValueError as e:
+                raise DataError(f"Invalid end cell format: {str(e)}")
+        else:
+            if ws.max_row == 1 and ws.max_column == 1 and ws.cell(1, 1).value is None:
+                end_row, end_col = start_row, start_col
+            else:
+                end_row, end_col = ws.max_row, ws.max_column
+                if raw_start.upper() == "A1":
+                    start_row, start_col = ws.min_row, ws.min_column
+
+        if start_row > ws.max_row or start_col > ws.max_column:
+            range_str = f"{get_column_letter(start_col)}{start_row}:"
+            wb.close()
+            return build_worksheet_table_payload(
+                sheet_name, range_str, [], max_rows=cap
+            )
+
+        range_str = (
+            f"{get_column_letter(start_col)}{start_row}:"
+            f"{get_column_letter(end_col)}{end_row}"
+        )
+        read_end_row = _export_read_end_row(start_row, end_row, cap)
+        total_data_rows = max(0, end_row - start_row)
+        matrix: List[List[Any]] = []
+        for row in range(start_row, read_end_row + 1):
+            matrix.append(
+                [ws.cell(row=row, column=col).value for col in range(start_col, end_col + 1)]
+            )
+
+        wb.close()
+        return build_worksheet_table_payload(
+            sheet_name,
+            range_str,
+            matrix,
+            max_rows=cap,
+            total_data_rows=total_data_rows,
+        )
+
+    except DataError:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export worksheet table: {e}")
         raise DataError(str(e))

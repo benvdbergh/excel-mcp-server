@@ -23,6 +23,7 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "validate_formula_syntax",
         "format_range",
         "read_data_from_excel",
+        "export_worksheet_table",
         "write_data_to_excel",
         "create_workbook",
         "save_workbook",
@@ -48,14 +49,15 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "excel_open_workbook",
         "excel_close_workbook",
         "excel_list_open_workbooks",
+        "evaluate_range",
     }
 )
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-def test_inventory_has_exactly_29_keys() -> None:
-    assert len(MCP_TOOL_INVENTORY) == 29
+def test_inventory_has_exactly_31_keys() -> None:
+    assert len(MCP_TOOL_INVENTORY) == 31
 
 
 def test_every_key_matches_expected_set_or_pattern() -> None:
@@ -83,9 +85,11 @@ def test_chart_and_pivot_are_v1_file_forced() -> None:
 
 def test_at_least_one_read_tool_is_read() -> None:
     assert get_tool_kind("read_data_from_excel") is ToolKind.READ
+    assert get_tool_kind("export_worksheet_table") is ToolKind.READ
 
 
 def test_lifecycle_tools_are_session() -> None:
     assert get_tool_kind("excel_open_workbook") is ToolKind.SESSION
     assert get_tool_kind("excel_close_workbook") is ToolKind.SESSION
     assert get_tool_kind("excel_list_open_workbooks") is ToolKind.SESSION
+    assert get_tool_kind("evaluate_range") is ToolKind.SESSION

@@ -46,6 +46,10 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
     "validate_formula_syntax": ToolInventoryEntry(ToolKind.READ),
     "format_range": ToolInventoryEntry(ToolKind.WRITE),
     "read_data_from_excel": ToolInventoryEntry(ToolKind.READ),
+    "export_worksheet_table": ToolInventoryEntry(
+        ToolKind.READ,
+        notes="Bulk table read: header row + compact data rows (Epic 2 / BEN-130).",
+    ),
     "write_data_to_excel": ToolInventoryEntry(ToolKind.WRITE),
     "create_workbook": ToolInventoryEntry(ToolKind.WRITE),
     "save_workbook": ToolInventoryEntry(
@@ -88,6 +92,10 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
     "excel_list_open_workbooks": ToolInventoryEntry(
         ToolKind.SESSION,
         notes="ADR 0009: enumerate Application.Workbooks; no filepath routing.",
+    ),
+    "evaluate_range": ToolInventoryEntry(
+        ToolKind.SESSION,
+        notes="COM-only recalc before reads; does not persist to disk (BEN-129).",
     ),
 }
 

@@ -49,6 +49,30 @@ def test_excel_close_workbook_when_com_unavailable_returns_error(
     assert "not available" in out.lower()
 
 
+def test_evaluate_range_when_com_unavailable_returns_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import excel_mcp.server as srv
+
+    p = tmp_path / "recalc.xlsx"
+    Workbook().save(p)
+    monkeypatch.setitem(srv.__dict__, "_COM_WORKBOOK_SERVICE", None)
+    out = srv.evaluate_range(str(p.resolve()), "Sheet")
+    assert "not available" in out.lower()
+
+
+def test_evaluate_range_rejects_file_transport(tmp_path: Path) -> None:
+    import excel_mcp.server as srv
+
+    p = tmp_path / "recalc.xlsx"
+    Workbook().save(p)
+    out = srv.evaluate_range(
+        str(p.resolve()), "Sheet", workbook_transport="file"
+    )
+    assert out.startswith("Error:")
+    assert "workbook_transport=file" in out
+
+
 def test_create_workbook_open_in_excel_notes_when_com_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

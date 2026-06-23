@@ -18,7 +18,15 @@ from openpyxl.utils import get_column_letter
 
 from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
+from excel_mcp.data import (
+    DEFAULT_EXPORT_MAX_ROWS,
+    _export_read_end_row,
+    _normalize_export_max_rows,
+    build_worksheet_table_payload,
+)
+from excel_mcp.exceptions import DataError
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
+from excel_mcp.routing.read_value_mode import validate_value_mode
 from excel_mcp.routing.workbook_host_identity import (
     normalized_workbook_fullname,
     protected_view_candidate_paths,
@@ -160,6 +168,24 @@ def _direct_read_matrix_com(
     return out
 
 
+def _direct_read_matrix_text_com(
+    ws: Any, srow: int, scol: int, nrows: int, ncols: int
+) -> List[List[Any]]:
+    """Read displayed text cell-by-cell via ``Worksheet.Cells`` ``Text``."""
+    out: List[List[Any]] = []
+    for ir in range(nrows):
+        r = srow + ir
+        row_vals: List[Any] = []
+        for ic in range(ncols):
+            c = scol + ic
+            try:
+                row_vals.append(ws.Cells(r, c).Text)
+            except Exception:
+                row_vals.append(None)
+        out.append(row_vals)
+    return out
+
+
 def _should_fallback_to_direct_read_com(
     ws: Any,
     matrix: List[List[Any]],
@@ -203,6 +229,85 @@ def _should_fallback_to_direct_read_com(
                 if mismatches >= 3:
                     return True
     return False
+
+
+def _should_fallback_to_direct_read_text_com(
+    ws: Any,
+    matrix: List[List[Any]],
+    srow: int,
+    scol: int,
+    nrows: int,
+    ncols: int,
+) -> bool:
+    """Detect bulk ``Range.Text`` sparsity anomalies (mirrors Value2 resiliency)."""
+    if nrows <= 0 or ncols <= 0:
+        return False
+
+    max_checks = 24
+    checked = 0
+    mismatches = 0
+    for ir in range(nrows):
+        if checked >= max_checks:
+            break
+        row_vals = matrix[ir] if ir < len(matrix) else []
+        for ic in range(ncols):
+            if checked >= max_checks:
+                break
+            bulk_val = row_vals[ic] if ic < len(row_vals) else None
+            if not _is_blankish_excel_value(bulk_val):
+                continue
+            r = srow + ir
+            c = scol + ic
+            try:
+                direct_val = ws.Cells(r, c).Text
+            except Exception:
+                direct_val = None
+            checked += 1
+            if not _is_blankish_excel_value(direct_val):
+                mismatches += 1
+                if mismatches >= 3:
+                    return True
+    return False
+
+
+def _read_range_matrix_com(
+    ws: Any,
+    rng: Any,
+    srow: int,
+    scol: int,
+    nrows: int,
+    ncols: int,
+    *,
+    value_mode: str = "value",
+) -> List[List[Any]]:
+    """Read a rectangular COM range as a matrix (Value2 or displayed Text)."""
+    if value_mode == "text":
+        if nrows == 1 and ncols == 1:
+            try:
+                matrix = _normalize_excel_matrix(rng.Text)
+            except Exception:
+                return _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+            bulk_val = matrix[0][0] if matrix and matrix[0] else None
+            if _is_blankish_excel_value(bulk_val):
+                direct = _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+                direct_val = direct[0][0] if direct and direct[0] else None
+                if not _is_blankish_excel_value(direct_val):
+                    return direct
+            elif _should_fallback_to_direct_read_text_com(
+                ws, matrix, srow, scol, nrows, ncols
+            ):
+                return _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+            return matrix
+        return _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+
+    try:
+        raw_vals = rng.Value2
+    except Exception:
+        return _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
+    matrix = _normalize_excel_matrix(raw_vals)
+    if _should_fallback_to_direct_read_com(ws, matrix, srow, scol, nrows, ncols):
+        return _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
+    return matrix
 
 
 def _com_used_bounds(ws: Any) -> Tuple[int, int, int, int]:
@@ -541,9 +646,14 @@ class ComWorkbookService:
         end_cell: Optional[str] = None,
         preview_only: bool = False,
         *,
+        value_mode: str = "value",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         del operation_metadata
+        try:
+            validate_value_mode(value_mode)
+        except ValueError as e:
+            return f"Error: {e}"
         return self._executor.submit(
             self._read_range_with_metadata_com,
             filepath,
@@ -551,6 +661,7 @@ class ComWorkbookService:
             start_cell,
             end_cell,
             preview_only,
+            value_mode,
         )
 
     @staticmethod
@@ -560,6 +671,7 @@ class ComWorkbookService:
         start_cell: str,
         end_cell: Optional[str],
         preview_only: bool,
+        value_mode: str = "value",
     ) -> str:
         del preview_only
         include_validation = True
@@ -611,6 +723,7 @@ class ComWorkbookService:
                 {
                     "range": f"{get_column_letter(scol)}{srow}:",
                     "sheet_name": sheet_name,
+                    "value_mode": value_mode,
                     "cells": [],
                 },
                 indent=2,
@@ -623,6 +736,7 @@ class ComWorkbookService:
         range_data: Dict[str, Any] = {
             "range": range_str,
             "sheet_name": sheet_name,
+            "value_mode": value_mode,
             "cells": [],
         }
 
@@ -631,13 +745,11 @@ class ComWorkbookService:
         try:
             top_left = ws.Cells(srow, scol)
             rng = top_left.Resize(nrows, ncols)
-            raw_vals = rng.Value2
+            matrix = _read_range_matrix_com(
+                ws, rng, srow, scol, nrows, ncols, value_mode=value_mode
+            )
         except Exception as exc:
             return f"Error: {exc}"
-
-        matrix = _normalize_excel_matrix(raw_vals)
-        if _should_fallback_to_direct_read_com(ws, matrix, srow, scol, nrows, ncols):
-            matrix = _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
         for ir in range(nrows):
             row_vals = matrix[ir] if ir < len(matrix) else []
             for ic in range(ncols):
@@ -666,6 +778,114 @@ class ComWorkbookService:
         if not range_data["cells"]:
             return "No data found in specified range"
         return json.dumps(range_data, indent=2, default=str)
+
+    def export_worksheet_table(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: str = "A1",
+        end_cell: Optional[str] = None,
+        max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        return self._executor.submit(
+            self._export_worksheet_table_com,
+            filepath,
+            sheet_name,
+            start_cell,
+            end_cell,
+            max_rows,
+        )
+
+    @staticmethod
+    def _export_worksheet_table_com(
+        filepath: str,
+        sheet_name: str,
+        start_cell: str,
+        end_cell: Optional[str],
+        max_rows: int,
+    ) -> str:
+        try:
+            cap = _normalize_export_max_rows(max_rows)
+        except DataError as e:
+            return f"Error: {str(e)}"
+
+        raw_start = start_cell.strip()
+        ec: Optional[str] = end_cell
+        if ":" in raw_start and ec is None:
+            parts = raw_start.split(":", 1)
+            raw_start, ec = parts[0].strip(), parts[1].strip()
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            srow, scol, _, _ = parse_cell_range(f"{raw_start}:{raw_start}")
+        except ValueError as e:
+            return f"Error: Invalid start cell format: {str(e)}"
+
+        uminr, uminc, umaxr, umaxc = _com_used_bounds(ws)
+        if ec is None:
+            if umaxr == 1 and umaxc == 1:
+                try:
+                    a1v = ws.Range("A1").Value2
+                except Exception:
+                    a1v = None
+                if a1v is None or a1v == "":
+                    erow, ecol = srow, scol
+                else:
+                    erow, ecol = umaxr, umaxc
+                    if raw_start.upper() == "A1":
+                        srow, scol = uminr, uminc
+            else:
+                erow, ecol = umaxr, umaxc
+                if raw_start.upper() == "A1":
+                    srow, scol = uminr, uminc
+        else:
+            try:
+                et = ec.strip() if ec else ""
+                erow, ecol, _, _ = parse_cell_range(f"{et}:{et}")
+            except ValueError as e:
+                return f"Error: Invalid end cell format: {str(e)}"
+
+        if srow > umaxr or scol > umaxc:
+            range_str = f"{get_column_letter(scol)}{srow}:"
+            payload = build_worksheet_table_payload(
+                sheet_name, range_str, [], max_rows=cap
+            )
+            return json.dumps(payload, indent=2, default=str)
+
+        range_str = (
+            f"{get_column_letter(scol)}{srow}:{get_column_letter(ecol)}{erow}"
+        )
+        read_erow = _export_read_end_row(srow, erow, cap)
+        total_data_rows = max(0, erow - srow)
+        nrows = read_erow - srow + 1
+        ncols = ecol - scol + 1
+        try:
+            top_left = ws.Cells(srow, scol)
+            rng = top_left.Resize(nrows, ncols)
+            matrix = _read_range_matrix_com(
+                ws, rng, srow, scol, nrows, ncols, value_mode="value"
+            )
+        except Exception as exc:
+            return f"Error: {exc}"
+
+        payload = build_worksheet_table_payload(
+            sheet_name,
+            range_str,
+            matrix,
+            max_rows=cap,
+            total_data_rows=total_data_rows,
+        )
+        return json.dumps(payload, indent=2, default=str)
 
     def workbook_metadata(
         self,
@@ -900,6 +1120,64 @@ class ComWorkbookService:
             return f"Error: {exc}"
         what = "saved and closed" if save else "closed without saving"
         return f"Workbook closed in Excel ({what}): {filepath}"
+
+    def evaluate_range(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: Optional[str] = None,
+        end_cell: Optional[str] = None,
+    ) -> str:
+        """Force Excel to recalculate a worksheet or range (COM-only side effect)."""
+        return self._executor.submit(
+            self._evaluate_range_com,
+            filepath,
+            sheet_name,
+            start_cell,
+            end_cell,
+        )
+
+    @staticmethod
+    def _evaluate_range_com(
+        filepath: str,
+        sheet_name: str,
+        start_cell: Optional[str],
+        end_cell: Optional[str],
+    ) -> str:
+        from excel_mcp.cell_utils import validate_cell_reference
+
+        if end_cell is not None and start_cell is None:
+            return "Error: end_cell requires start_cell"
+        if start_cell is not None and not validate_cell_reference(start_cell):
+            return f"Error: Invalid start cell reference: {start_cell}"
+        if end_cell is not None and not validate_cell_reference(end_cell):
+            return f"Error: Invalid end cell reference: {end_cell}"
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            if start_cell is None:
+                ws.Calculate()
+                scope = f"sheet '{sheet_name}'"
+            elif end_cell is None:
+                ws.Range(start_cell).Calculate()
+                scope = f"range {start_cell}"
+            else:
+                ws.Range(start_cell, end_cell).Calculate()
+                scope = f"range {start_cell}:{end_cell}"
+        except Exception as exc:
+            return f"Error: {exc}"
+
+        return (
+            f"Recalculated {scope} via Excel COM (in-memory only; "
+            f"call save_workbook to flush to disk for file-based reads)"
+        )
 
     def list_open_workbooks(self) -> str:
         """Enumerate ``Application.Workbooks`` on the COM thread (ADR 0009).
