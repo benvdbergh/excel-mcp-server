@@ -97,7 +97,7 @@ evaluate_range(
 
 ### save_workbook
 
-Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Lets agents flush host state before `read_data_from_excel` when using COM (ADR 0003).
+Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Call when you need an **on-disk** snapshot (external tools, `workbook_transport=file`, or after COM writes before file-backed reads). COM-first reads (`workbook_transport=auto`/`com`) use the **live Excel grid** and do not require `save_workbook` first (ADR 0008; ADR 0003 disk semantics).
 
 ```python
 save_workbook(
@@ -157,7 +157,11 @@ write_data_to_excel(
 
 ### read_data_from_excel
 
-Read data from Excel worksheet.
+Read data from Excel worksheet with per-cell validation metadata.
+
+**Discovery workflow ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)):** `excel_list_open_workbooks` → copy `full_name` → pass as `filepath` below (same as VBA `? ActiveWorkbook.FullName`).
+
+**COM-first reads ([ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)):** With `workbook_transport=auto` or `com`, values come from the **live Excel session**, not necessarily the last saved file on disk. Use `workbook_transport=file` only when you need the on-disk snapshot.
 
 ```python
 read_data_from_excel(
@@ -172,11 +176,11 @@ read_data_from_excel(
 ) -> str
 ```
 
-- `filepath`: Path to Excel file, or exact `https://` SharePoint-style URL matching Excel `Workbook.FullName` when using COM (see `excel_list_open_workbooks`, ADR 0006)
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top; SharePoint-style `https://…` URLs per [ADR 0006](docs/architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md); use `excel_list_open_workbooks` → `full_name` per ADR 0009)
 - `sheet_name`: Source worksheet name
 - `start_cell`: Starting cell (default: "A1")
-- `end_cell`: Optional ending cell
-- `workbook_transport`: Workbook execution mode (`auto`, `file`, `com`)
+- `end_cell`: Optional ending cell (auto-expands when omitted)
+- `workbook_transport`: same workbook routing parameter as all routed tools (see table above; ADR 0001)
 - `include_routing_metadata`: When `true`, wrap successful JSON in the ADR 0010 envelope (see below). Default `false` for backward compatibility.
 - `value_mode`: How cell values are returned — `"value"` (default, raw `Value2` / `cell.value`) or `"text"` (display text). Unknown values return an actionable error.
 - `metadata_mode`: Per-cell metadata density — `"full"` (default, includes per-cell `validation` objects) or `"compact"` (omits per-cell validation to reduce payload size on large ranges). Root JSON echoes `"metadata_mode"`.
@@ -269,6 +273,7 @@ export_worksheet_table(
 - `rows`: remaining rows as a compact matrix (no per-cell metadata)
 - `row_count`: total data rows in the range (excluding the header row), before truncation
 - `truncated`: `true` when `row_count` exceeds `max_rows` (response `rows` is capped)
+
 
 ## Formatting Operations
 

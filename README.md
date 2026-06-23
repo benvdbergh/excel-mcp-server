@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=excel-com-mcp&config=eyJjb21tYW5kIjoidXZ4IGV4Y2VsLWNvbS1tY3Agc3RkaW8ifQ%3D%3D)
 
-A Model Context Protocol (MCP) server that lets you manipulate Excel files without needing Microsoft Excel installed. Create, read, and modify Excel workbooks with your AI agent.
+A Model Context Protocol (MCP) server that lets your AI agent create, read, and modify Excel workbooks. On Windows, **COM-first routing** ([ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)) targets the **live Excel session** when the workbook is open in Microsoft Excel (`workbook_transport=auto` or `com`); otherwise—or for **headless**, **file-only**, and **CI** runs with no Excel installed—tools use **openpyxl** on disk (`workbook_transport=file`, or when COM is unavailable). See the [operator documentation map](#operator-documentation-map), [COM workflow](#com-workflow), and [`TOOLS.md`](TOOLS.md).
 
 ## Features
 
@@ -49,9 +49,11 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 | Artifact | Purpose |
 |----------|---------|
 | **This README** | Transports, env vars, **filepath** rules (disk vs SharePoint URL), Cursor/`uv` local MCP setup, allowlists |
+| **[`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md)** | **SSOT** registry: Cursor agent ids (`user-excel`, `user-excel-local`), `mcp.json` keys (`excel`, `excel-local`), PyPI vs fork |
 | **[`TOOLS.md`](TOOLS.md)** | Per-tool reference; same `filepath` and `workbook_transport` rules apply to every workbook tool |
+| **Host MCP tool schemas** | Before the first Excel MCP call in a session, inspect host tool descriptors for **`filepath`**, **`workbook_transport`**, and **`sheet_name`**; full contract in [`TOOLS.md`](TOOLS.md) |
 | **`manifest.json`** | MCP catalog metadata; `mcp_config` for PyPI/registry (`uvx excel-com-mcp stdio`); local fork uses [`.cursor/mcp.json`](.cursor/mcp.json) (see [Stdio Transport](#1-stdio-transport-for-local-use)) |
-| **[`.cursor/mcp.json`](.cursor/mcp.json)** | **Local-clone SSOT:** `excel-local` server with `${workspaceFolder}`, Windows COM extra, and operator env (see [Local clone in Cursor](#local-clone-in-cursor-this-repo)) |
+| **[`.cursor/mcp.json`](.cursor/mcp.json)** | **Local-clone SSOT:** `excel-local` server with `${workspaceFolder}`, Windows COM extra, and operator env (see [MCP server ids](docs/operator/mcp-server-ids.md) and [Local clone in Cursor](#local-clone-in-cursor-this-repo)) |
 | **[`CHANGELOG.md`](CHANGELOG.md)** | Version-to-version release notes and breaking changes |
 | **[`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md)** | Epic/story delivery status for workbook routing |
 
@@ -86,6 +88,8 @@ uvx excel-com-mcp stdio
 }
 ```
 
+Agent-visible server id: **`user-excel`**. See [`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md).
+
 #### Local clone in Cursor (this repo)
 
 MCP often starts `uv` with **no project working directory**, so `uv run --extra com …` fails with *"`--extra com` has no effect when used outside of a project"* and *`program not found`*. Pass the project explicitly with **`--project`** (path to the folder that contains `pyproject.toml`). The repo ships [`.cursor/mcp.json`](.cursor/mcp.json) using **`${workspaceFolder}`** so Cursor resolves the clone automatically:
@@ -105,7 +109,9 @@ MCP often starts `uv` with **no project working directory**, so `uv run --extra 
 }
 ```
 
-Replace **`YOUR-TENANT`** with your SharePoint tenant hostname.
+Agent-visible server id: **`user-excel-local`** (Cursor prefix). Full registry: [`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md).
+
+Replace **`YOUR-TENANT`** with your SharePoint tenant hostname. On Windows you can use `C:\\Users\\YOU\\...` instead of forward slashes. Omit `"com"` on non-Windows installs. You can add `"cwd"` with the same path as a hint for other tools, but **`--project` is what fixes `uv run`**.
 
 > **Windows / COM only:** [`.cursor/mcp.json`](.cursor/mcp.json) includes `--extra com` for COM-first routing. On Linux/macOS, omit `"--extra", "com"` from `args` (the `com` extra pulls `pywin32`, which has no wheels there).
 
@@ -268,9 +274,11 @@ Routed workbook operations (via ``execute_routed_workbook_operation`` in ``excel
 - **mcp_tool_name** — optional registered MCP tool name when supplied by the caller.
 - **v1_file_forced** — `true` when **ADR 0004** forces the **file** backend for a tool (chart / pivot v1) regardless of `auto`→COM for other writes.
 
+<a id="com-workflow"></a>
+
 ### ADR 0008 / ADR 0003 — COM-first reads and when disk matters
 
-Read-class tools use the **same routing** as writes (**COM-first** when `transport=auto`/`com`, the workbook matches an open host, and COM is viable; otherwise **openpyxl** file path). Live grid reads therefore follow **Excel** when COM is selected, not necessarily the last saved file. If you rely on **on-disk** snapshots (external tools, `workbook_transport=file`), or after COM writes you need the file to match the host, call **`save_workbook`** before file-backed operations. **`create_chart`** / **`create_pivot_table`** remain **file-forced** (ADR 0004). Historical “file-default reads” (ADR 0007) are superseded; see [`docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md`](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md) and [`docs/architecture/adr/0003-read-path-com-parity.md`](docs/architecture/adr/0003-read-path-com-parity.md).
+Read-class tools use the **same routing** as writes (**COM-first** when `workbook_transport=auto`/`com`, the workbook matches an open host, and COM is viable; otherwise **openpyxl** file path). Live grid reads therefore follow **Excel** when COM is selected, not necessarily the last saved file. If you rely on **on-disk** snapshots (external tools, `workbook_transport=file`), or after COM writes you need the file to match the host, call **`save_workbook`** before file-backed operations. **`create_chart`** / **`create_pivot_table`** remain **file-forced** (ADR 0004). Historical “file-default reads” (ADR 0007) are superseded; see [`docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md`](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md) and [`docs/architecture/adr/0003-read-path-com-parity.md`](docs/architecture/adr/0003-read-path-com-parity.md).
 
 ### FR-9 — Protected View, read-only, duplicate instances
 
@@ -291,6 +299,8 @@ The server **does not** request **administrator elevation** by default (COM auto
 ### COM execution threading (Windows)
 
 COM apartment rules require Excel automation from a **consistent thread**. The server uses ``excel_mcp.com_executor.ComThreadExecutor``: a **single worker thread** pulls jobs from a queue; ``submit(fn, *args, **kwargs)`` runs ``fn`` on that thread and **blocks** the caller until the result is ready (or an exception is propagated), so synchronous MCP tool handlers stay compatible without turning every tool ``async``. On Windows, that worker thread calls ``pythoncom.CoInitialize()`` before processing jobs and ``CoUninitialize()`` on shutdown so COM APIs such as ``GetActiveObject("Excel.Application")`` behave like a normal main-thread script (without this, automation from a plain background thread often fails even when Excel is running). The executor does **not** start Excel by itself. For tests or clean process teardown, call ``shutdown(wait=True)``; abrupt exit may still cut off in-flight work—see the module docstring on ``com_executor`` for limitations (including no reentrant ``submit`` from inside a job on the worker).
+
+**Standalone win32com scripts (boundary):** Raw **pywin32** automation is **not** an MCP tool. Prefer MCP through the **office-xlsx** skill COM golden path; if reads still fail after the null-value playbook, use a **separate** one-off script only as a last resort (`~/.claude/skills/office-xlsx/references/com-python-escape-hatch.md`). **Do not** run that script concurrently against a workbook the MCP server is automating.
 
 ### Windows manual smoke (COM write path)
 

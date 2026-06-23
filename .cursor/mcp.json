@@ -2,7 +2,15 @@
   "mcpServers": {
     "excel-local": {
       "command": "uv",
-      "args": ["run", "--project", "${workspaceFolder}", "--extra", "com", "excel-com-mcp", "stdio"],
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}",
+        "--extra",
+        "com",
+        "excel-com-mcp",
+        "stdio"
+      ],
       "env": {
         "EXCEL_MCP_TRANSPORT": "auto",
         "EXCEL_MCP_ALLOWED_URL_PREFIXES": "https://YOUR-TENANT.sharepoint.com/"

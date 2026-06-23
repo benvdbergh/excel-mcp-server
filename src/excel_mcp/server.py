@@ -156,6 +156,8 @@ mcp = FastMCP(
         "Lifecycle: excel_open_workbook, excel_close_workbook (COM). "
         "Recalc: evaluate_range (COM-only; does not save to disk). create_workbook optional open_in_excel. "
         "Env: EXCEL_MCP_TRANSPORT, EXCEL_MCP_ALLOWED_PATHS, EXCEL_MCP_ALLOWED_URL_PREFIXES (with path allowlist). "
+        "Before first tool call in a session, inspect host MCP tool schemas for filepath, workbook_transport, and sheet_name; "
+        "full contract in TOOLS.md. "
         "Full operator docs: repository README and TOOLS.md; local Cursor MCP: README section on uv run --project."
     ),
 )
@@ -378,14 +380,18 @@ def read_data_from_excel(
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
-    
+
     Args:
-        filepath: Path to Excel file, or exact https SharePoint-style URL matching
-            Excel Workbook.FullName when using COM (see excel_list_open_workbooks).
+        filepath: Absolute local path, or for COM/cloud workbooks the exact ``https://…``
+            SharePoint-style URL matching Excel ``Workbook.FullName`` (ADR 0006). Call
+            ``excel_list_open_workbooks`` and copy a ``full_name`` when unsure (ADR 0009).
         sheet_name: Name of worksheet
         start_cell: Starting cell (default A1)
         end_cell: Ending cell (optional, auto-expands if not provided)
-        workbook_transport: Workbook execution mode (auto, file, com)
+        workbook_transport: Optional execution mode ``auto`` | ``file`` | ``com`` (ADR 0001;
+            default from ``EXCEL_MCP_TRANSPORT`` env). Not the MCP wire transport.
+            With ``auto``/``com``, reads the live Excel grid (ADR 0008), not necessarily
+            the last saved file on disk.
         include_routing_metadata: When true, wrap JSON in ADR 0010 envelope with
             _meta (workbook_transport, workbook_backend, routing_reason, duration_ms)
             and optional warnings (e.g. file_backend_formula_not_evaluated on .xlsm).
@@ -398,12 +404,12 @@ def read_data_from_excel(
     null for formula cells. Prefer ``workbook_transport=auto`` or ``com`` when the
     workbook is open in Excel. With ``include_routing_metadata=true``, that limit
     surfaces as warning code ``file_backend_formula_not_evaluated``.
-    
-    Returns:  
-    JSON string containing structured cell data with validation metadata.
-    Each cell includes: address, value, row, column, and validation info (if any).
-    Root JSON includes ``value_mode`` and ``metadata_mode``. When include_routing_metadata is true, the
-    payload is wrapped per ADR 0010.
+
+    Returns:
+        JSON string containing structured cell data with validation metadata.
+        Each cell includes: address, value, row, column, and validation info (if any).
+        Root JSON includes ``value_mode`` and ``metadata_mode``. When include_routing_metadata is true, the
+        payload is wrapped per ADR 0010.
     """
     try:
         validate_value_mode(value_mode)
