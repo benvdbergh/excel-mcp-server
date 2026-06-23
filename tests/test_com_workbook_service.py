@@ -137,6 +137,144 @@ def test_read_range_with_metadata_fallback_reads_direct_cells(book_path):
     assert values == ["A11", "B11", "A12", "B12"]
 
 
+def _read_range_fixture(
+    book_path: str,
+    *,
+    rng: MagicMock,
+    cells: dict[tuple[int, int], MagicMock],
+    used_rows: int = 1,
+    used_cols: int = 1,
+    value_mode: str = "value",
+    end_cell: str = "A1",
+) -> str:
+    ws = MagicMock()
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = used_rows
+    used.Columns.Count = used_cols
+    ws.UsedRange = used
+    cells[(1, 1)].Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(side_effect=lambda r, c: cells[(r, c)])
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        return svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", end_cell, value_mode=value_mode
+        )
+
+
+def test_read_range_with_metadata_text_mode_returns_display_text(book_path):
+    """Formatted currency cells return Range.Text, not raw Value2."""
+    rng = MagicMock()
+    rng.Text = "19,900.00 €"
+    rng.Value2 = 19900
+
+    cell = MagicMock()
+    cell.Text = "19,900.00 €"
+    cell.Value2 = 19900
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 0
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+        value_mode="text",
+    )
+    data = json.loads(raw)
+    assert data["cells"][0]["value"] == "19,900.00 €"
+
+
+def test_read_range_with_metadata_text_mode_multi_cell(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    rng.Text = "19,900.00 €"
+
+    used = MagicMock()
+    used.Row = 1
+    used.Column = 1
+    used.Rows.Count = 1
+    used.Columns.Count = 2
+    ws.UsedRange = used
+
+    cells: dict[tuple[int, int], MagicMock] = {}
+    for coord, text, raw in [
+        ((1, 1), "19,900.00 €", 19900),
+        ((1, 2), "1,250.50 €", 1250.5),
+    ]:
+        cell = MagicMock()
+        cell.Text = text
+        cell.Value2 = raw
+        cell.Validation = MagicMock()
+        cell.Validation.Type = 0
+        cells[coord] = cell
+    cells[(1, 1)].Resize = MagicMock(return_value=rng)
+    ws.Cells = MagicMock(side_effect=lambda r, c: cells[(r, c)])
+
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.read_range_with_metadata(
+            book_path, "Sheet1", "A1", "B1", value_mode="text"
+        )
+
+    data = json.loads(raw)
+    values = [c["value"] for c in data["cells"]]
+    assert values == ["19,900.00 €", "1,250.50 €"]
+
+
+def test_read_range_with_metadata_value_mode_uses_value2(book_path):
+    """Default value_mode keeps Value2 reads (raw numbers, not display text)."""
+    rng = MagicMock()
+    rng.Value2 = 19900
+    rng.Text = "19,900.00 €"
+
+    cell = MagicMock()
+    cell.Value2 = 19900
+    cell.Text = "19,900.00 €"
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 0
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+    )
+    data = json.loads(raw)
+    assert data["cells"][0]["value"] == 19900
+
+
+def test_read_range_with_metadata_text_mode_bulk_fallback(book_path):
+    """Bulk Range.Text sparsity on 1x1 triggers per-cell Text fallback."""
+    rng = MagicMock()
+    rng.Text = None
+
+    cell = MagicMock()
+    cell.Text = "19,900.00 €"
+    cell.Value2 = 19900
+    cell.Validation = MagicMock()
+    cell.Validation.Type = 0
+
+    raw = _read_range_fixture(
+        book_path,
+        rng=rng,
+        cells={(1, 1): cell},
+        value_mode="text",
+    )
+    data = json.loads(raw)
+    assert data["cells"][0]["value"] == "19,900.00 €"
+
+
 def test_save_workbook_invokes_save(book_path):
     wb = _workbook_mock(book_path, {})
     wb.Save = MagicMock()

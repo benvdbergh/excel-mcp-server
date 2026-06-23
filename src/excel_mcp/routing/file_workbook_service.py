@@ -70,9 +70,10 @@ class FileWorkbookService:
         end_cell: Optional[str] = None,
         preview_only: bool = False,
         *,
+        value_mode: str = "value",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
-        del preview_only, operation_metadata
+        del preview_only, value_mode, operation_metadata
         try:
             result = read_excel_range_with_metadata(
                 filepath,

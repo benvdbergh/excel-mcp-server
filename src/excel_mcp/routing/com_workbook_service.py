@@ -160,6 +160,24 @@ def _direct_read_matrix_com(
     return out
 
 
+def _direct_read_matrix_text_com(
+    ws: Any, srow: int, scol: int, nrows: int, ncols: int
+) -> List[List[Any]]:
+    """Read displayed text cell-by-cell via ``Worksheet.Cells`` ``Text``."""
+    out: List[List[Any]] = []
+    for ir in range(nrows):
+        r = srow + ir
+        row_vals: List[Any] = []
+        for ic in range(ncols):
+            c = scol + ic
+            try:
+                row_vals.append(ws.Cells(r, c).Text)
+            except Exception:
+                row_vals.append(None)
+        out.append(row_vals)
+    return out
+
+
 def _should_fallback_to_direct_read_com(
     ws: Any,
     matrix: List[List[Any]],
@@ -203,6 +221,85 @@ def _should_fallback_to_direct_read_com(
                 if mismatches >= 3:
                     return True
     return False
+
+
+def _should_fallback_to_direct_read_text_com(
+    ws: Any,
+    matrix: List[List[Any]],
+    srow: int,
+    scol: int,
+    nrows: int,
+    ncols: int,
+) -> bool:
+    """Detect bulk ``Range.Text`` sparsity anomalies (mirrors Value2 resiliency)."""
+    if nrows <= 0 or ncols <= 0:
+        return False
+
+    max_checks = 24
+    checked = 0
+    mismatches = 0
+    for ir in range(nrows):
+        if checked >= max_checks:
+            break
+        row_vals = matrix[ir] if ir < len(matrix) else []
+        for ic in range(ncols):
+            if checked >= max_checks:
+                break
+            bulk_val = row_vals[ic] if ic < len(row_vals) else None
+            if not _is_blankish_excel_value(bulk_val):
+                continue
+            r = srow + ir
+            c = scol + ic
+            try:
+                direct_val = ws.Cells(r, c).Text
+            except Exception:
+                direct_val = None
+            checked += 1
+            if not _is_blankish_excel_value(direct_val):
+                mismatches += 1
+                if mismatches >= 3:
+                    return True
+    return False
+
+
+def _read_range_matrix_com(
+    ws: Any,
+    rng: Any,
+    srow: int,
+    scol: int,
+    nrows: int,
+    ncols: int,
+    *,
+    value_mode: str = "value",
+) -> List[List[Any]]:
+    """Read a rectangular COM range as a matrix (Value2 or displayed Text)."""
+    if value_mode == "text":
+        if nrows == 1 and ncols == 1:
+            try:
+                matrix = _normalize_excel_matrix(rng.Text)
+            except Exception:
+                return _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+            bulk_val = matrix[0][0] if matrix and matrix[0] else None
+            if _is_blankish_excel_value(bulk_val):
+                direct = _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+                direct_val = direct[0][0] if direct and direct[0] else None
+                if not _is_blankish_excel_value(direct_val):
+                    return direct
+            elif _should_fallback_to_direct_read_text_com(
+                ws, matrix, srow, scol, nrows, ncols
+            ):
+                return _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+            return matrix
+        return _direct_read_matrix_text_com(ws, srow, scol, nrows, ncols)
+
+    try:
+        raw_vals = rng.Value2
+    except Exception:
+        return _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
+    matrix = _normalize_excel_matrix(raw_vals)
+    if _should_fallback_to_direct_read_com(ws, matrix, srow, scol, nrows, ncols):
+        return _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
+    return matrix
 
 
 def _com_used_bounds(ws: Any) -> Tuple[int, int, int, int]:
@@ -541,6 +638,7 @@ class ComWorkbookService:
         end_cell: Optional[str] = None,
         preview_only: bool = False,
         *,
+        value_mode: str = "value",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         del operation_metadata
@@ -551,6 +649,7 @@ class ComWorkbookService:
             start_cell,
             end_cell,
             preview_only,
+            value_mode,
         )
 
     @staticmethod
@@ -560,6 +659,7 @@ class ComWorkbookService:
         start_cell: str,
         end_cell: Optional[str],
         preview_only: bool,
+        value_mode: str = "value",
     ) -> str:
         del preview_only
         include_validation = True
@@ -631,13 +731,11 @@ class ComWorkbookService:
         try:
             top_left = ws.Cells(srow, scol)
             rng = top_left.Resize(nrows, ncols)
-            raw_vals = rng.Value2
+            matrix = _read_range_matrix_com(
+                ws, rng, srow, scol, nrows, ncols, value_mode=value_mode
+            )
         except Exception as exc:
             return f"Error: {exc}"
-
-        matrix = _normalize_excel_matrix(raw_vals)
-        if _should_fallback_to_direct_read_com(ws, matrix, srow, scol, nrows, ncols):
-            matrix = _direct_read_matrix_com(ws, srow, scol, nrows, ncols)
         for ir in range(nrows):
             row_vals = matrix[ir] if ir < len(matrix) else []
             for ic in range(ncols):
