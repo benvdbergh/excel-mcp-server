@@ -5,12 +5,19 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+from openpyxl import Workbook
+
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from excel_mcp.routing.file_workbook_service import FileWorkbookService  # noqa: E402
+from excel_mcp.routing.routed_dispatch import (  # noqa: E402
+    FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
+    file_backend_formula_not_evaluated_warning,
+)
 from excel_mcp.routing.workbook_operation_contract import (  # noqa: E402
     ROUTED_WORKBOOK_OPERATION_NAMES,
 )
@@ -23,17 +30,72 @@ def test_file_workbook_service_has_all_routed_operation_names() -> None:
         assert callable(getattr(svc, name)), name
 
 
+def test_read_range_with_metadata_xlsm_formula_emits_warning(tmp_path) -> None:
+    p = tmp_path / "macros.xlsm"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "=1+1"
+    wb.save(p)
+    path = str(p.resolve())
+
+    warnings: list = []
+    svc = FileWorkbookService()
+    raw = svc.read_range_with_metadata(
+        path,
+        "Sheet1",
+        "A1",
+        "A1",
+        operation_metadata={"_response_warnings": warnings},
+    )
+    data = json.loads(raw)
+    assert data["cells"][0]["address"] == "A1"
+    assert len(warnings) == 1
+    assert warnings[0]["code"] == FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE
+    assert warnings[0] == file_backend_formula_not_evaluated_warning()
+
+
+def test_read_range_with_metadata_xlsx_formula_no_warning(tmp_path) -> None:
+    p = tmp_path / "plain.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "=1+1"
+    wb.save(p)
+    path = str(p.resolve())
+
+    warnings: list = []
+    svc = FileWorkbookService()
+    svc.read_range_with_metadata(
+        path,
+        "Sheet1",
+        "A1",
+        "A1",
+        operation_metadata={"_response_warnings": warnings},
+    )
+    assert warnings == []
+
+
 @patch("excel_mcp.routing.file_workbook_service.read_excel_range_with_metadata")
 def test_read_range_with_metadata_json(mock_read: MagicMock) -> None:
     payload = {
         "range": "A1:A1",
         "sheet_name": "S",
+        "value_mode": "value",
         "cells": [{"address": "A1", "value": 1, "row": 1, "column": 1}],
     }
     mock_read.return_value = payload
     svc = FileWorkbookService()
     out = svc.read_range_with_metadata("/abs/book.xlsx", "S", "A1", "A1")
-    mock_read.assert_called_once_with("/abs/book.xlsx", "S", "A1", "A1")
+    mock_read.assert_called_once_with(
+        "/abs/book.xlsx",
+        "S",
+        "A1",
+        "A1",
+        value_mode="value",
+        metadata_mode="full",
+        file_backend_warnings=None,
+    )
     assert json.loads(out) == payload
     assert out.startswith("{")
 
@@ -43,6 +105,45 @@ def test_read_range_with_metadata_empty(mock_read: MagicMock) -> None:
     mock_read.return_value = {"cells": []}
     svc = FileWorkbookService()
     assert svc.read_range_with_metadata("/abs/b.xlsx", "S") == "No data found in specified range"
+
+
+def test_read_range_with_metadata_invalid_value_mode() -> None:
+    svc = FileWorkbookService()
+    with pytest.raises(ValueError, match="Invalid value_mode"):
+        svc.read_range_with_metadata("/abs/b.xlsx", "S", value_mode="display")
+
+
+def test_read_range_with_metadata_text_mode_file_backend(tmp_path) -> None:
+    p = tmp_path / "formatted.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = 19900
+    ws["A1"].number_format = "#,##0.00"
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    raw = svc.read_range_with_metadata(path, "Sheet1", "A1", "A1", value_mode="text")
+    data = json.loads(raw)
+    assert data["value_mode"] == "text"
+    assert data["cells"][0]["value"] == "19,900.00"
+    assert data["cells"][0]["value"] != 19900
+
+
+def test_read_range_with_metadata_default_echoes_value_mode(tmp_path) -> None:
+    p = tmp_path / "plain.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = 42
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    data = json.loads(svc.read_range_with_metadata(path, "Sheet1", "A1", "A1"))
+    assert data["value_mode"] == "value"
+    assert data["cells"][0]["value"] == 42
 
 
 @patch("excel_mcp.routing.file_workbook_service.get_all_validation_ranges")
@@ -139,3 +240,58 @@ def test_routing_package_exports_file_workbook_service() -> None:
     from excel_mcp.routing import FileWorkbookService as FWS  # noqa: E402
 
     assert FWS is FileWorkbookService
+
+
+def test_export_worksheet_table_file_backend(tmp_path) -> None:
+    p = tmp_path / "table.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["Col1", "Col2"])
+    ws.append(["a", 1])
+    ws.append(["b", 2])
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    data = json.loads(svc.export_worksheet_table(path, "Sheet1"))
+    assert data["sheet_name"] == "Sheet1"
+    assert data["headers"] == ["Col1", "Col2"]
+    assert data["rows"] == [["a", 1], ["b", 2]]
+    assert data["row_count"] == 2
+    assert data["truncated"] is False
+    assert data["max_rows"] == 10000
+
+
+def test_export_worksheet_table_max_rows_truncates(tmp_path) -> None:
+    p = tmp_path / "big.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["H"])
+    for i in range(5):
+        ws.append([i])
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    data = json.loads(svc.export_worksheet_table(path, "Sheet1", max_rows=2))
+    assert data["headers"] == ["H"]
+    assert len(data["rows"]) == 2
+    assert data["row_count"] == 5
+    assert data["truncated"] is True
+    assert data["max_rows"] == 2
+
+
+def test_export_worksheet_table_invalid_max_rows_file_backend(tmp_path) -> None:
+    p = tmp_path / "big.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["H"])
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    out = svc.export_worksheet_table(path, "Sheet1", max_rows=0)
+    assert out == "Error: max_rows must be a positive integer"

@@ -30,6 +30,8 @@ from excel_mcp.routing import (
     get_tool_kind,
     resolve_workbook_transport,
 )
+from excel_mcp.routing.routed_dispatch import build_routed_response_envelope
+from excel_mcp.routing.read_value_mode import validate_metadata_mode, validate_value_mode
 from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 from excel_mcp.routing.routing_errors import (
     ComExecutionNotImplementedError,
@@ -96,6 +98,9 @@ def _workbook_dispatch(
     workbook_transport: Optional[str],
     do_op: Callable[[str], str],
     com_do_op: Callable[[str], str] | None = None,
+    *,
+    include_routing_metadata: bool = False,
+    response_warnings: list | None = None,
 ) -> str:
     """Resolve path, route transport, run one contract op."""
     full_path = get_excel_path(filepath)
@@ -106,7 +111,7 @@ def _workbook_dispatch(
     com_callable: Callable[[], str] | None = None
     if _COM_WORKBOOK_SERVICE is not None and com_do_op is not None:
         com_callable = lambda: com_do_op(full_path)
-    out, _backend = execute_routed_workbook_operation(
+    out, _backend, routing_meta = execute_routed_workbook_operation(
         _ROUTING_BACKEND,
         _FILE_WORKBOOK_SERVICE,
         resolved_path=full_path,
@@ -118,6 +123,12 @@ def _workbook_dispatch(
         com_operation_callable=com_callable,
         mcp_tool_name=mcp_tool_name,
     )
+    if include_routing_metadata:
+        return build_routed_response_envelope(
+            out,
+            routing_meta,
+            warnings=list(response_warnings or ()),
+        )
     return out
 
 
@@ -142,7 +153,8 @@ mcp = FastMCP(
         "M365 sign-in is via Excel/Office, not this server. "
         "Optional on tools: workbook_transport (auto|file|com). "
         "Discovery: excel_list_open_workbooks (COM) for open workbook FullName locators (ADR 0009). "
-        "Lifecycle: excel_open_workbook, excel_close_workbook (COM). create_workbook optional open_in_excel. "
+        "Lifecycle: excel_open_workbook, excel_close_workbook (COM). "
+        "Recalc: evaluate_range (COM-only; does not save to disk). create_workbook optional open_in_excel. "
         "Env: EXCEL_MCP_TRANSPORT, EXCEL_MCP_ALLOWED_PATHS, EXCEL_MCP_ALLOWED_URL_PREFIXES (with path allowlist). "
         "Before first tool call in a session, inspect host MCP tool schemas for filepath, workbook_transport, and sheet_name; "
         "full contract in TOOLS.md. "
@@ -361,8 +373,10 @@ def read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    preview_only: bool = False,
     workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+    value_mode: str = "value",
+    metadata_mode: str = "full",
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
@@ -374,42 +388,130 @@ def read_data_from_excel(
         sheet_name: Name of worksheet
         start_cell: Starting cell (default A1)
         end_cell: Ending cell (optional, auto-expands if not provided)
-        preview_only: Whether to return preview only
         workbook_transport: Optional execution mode ``auto`` | ``file`` | ``com`` (ADR 0001;
             default from ``EXCEL_MCP_TRANSPORT`` env). Not the MCP wire transport.
             With ``auto``/``com``, reads the live Excel grid (ADR 0008), not necessarily
             the last saved file on disk.
+        include_routing_metadata: When true, wrap JSON in ADR 0010 envelope with
+            _meta (workbook_transport, workbook_backend, routing_reason, duration_ms)
+            and optional warnings (e.g. file_backend_formula_not_evaluated on .xlsm).
+        value_mode: ``value`` (raw cell values) or ``text`` (display text; COM uses
+            Range.Text; file backend is best-effort formatted string)
+        metadata_mode: ``full`` (per-cell validation metadata, default) or ``compact``
+            (omit per-cell validation to shrink large-range payloads)
+
+    File backend (openpyxl) does not evaluate formulas; ``.xlsm`` reads may return
+    null for formula cells. Prefer ``workbook_transport=auto`` or ``com`` when the
+    workbook is open in Excel. With ``include_routing_metadata=true``, that limit
+    surfaces as warning code ``file_backend_formula_not_evaluated``.
 
     Returns:
         JSON string containing structured cell data with validation metadata.
         Each cell includes: address, value, row, column, and validation info (if any).
+        Root JSON includes ``value_mode`` and ``metadata_mode``. When include_routing_metadata is true, the
+        payload is wrapped per ADR 0010.
     """
     try:
-        return _workbook_dispatch(
-            "read_data_from_excel",
-            filepath,
-            workbook_transport,
-            lambda fp: _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
+        validate_value_mode(value_mode)
+        validate_metadata_mode(metadata_mode)
+        routing_warnings: list = []
+
+        def _file_read(fp: str) -> str:
+            op_meta = (
+                {"_response_warnings": routing_warnings}
+                if include_routing_metadata
+                else None
+            )
+            return _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
                 fp,
                 sheet_name,
                 start_cell,
                 end_cell,
-                preview_only,
-            ),
+                value_mode=value_mode,
+                metadata_mode=metadata_mode,
+                operation_metadata=op_meta,
+            )
+
+        return _workbook_dispatch(
+            "read_data_from_excel",
+            filepath,
+            workbook_transport,
+            _file_read,
             com_do_op=_com_dispatch(
                 lambda c, fp: c.read_range_with_metadata(
                     fp,
                     sheet_name,
                     start_cell,
                     end_cell,
-                    preview_only,
+                    value_mode=value_mode,
+                    metadata_mode=metadata_mode,
+                )
+            ),
+            include_routing_metadata=include_routing_metadata,
+            response_warnings=routing_warnings if include_routing_metadata else None,
+        )
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error reading data: {e}")
+        raise
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Export Worksheet Table",
+        readOnlyHint=True,
+    ),
+)
+def export_worksheet_table(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str = "A1",
+    end_cell: Optional[str] = None,
+    max_rows: int = 10000,
+    workbook_transport: Optional[str] = None,
+) -> str:
+    """
+    Export worksheet data as a compact table (header row + data rows).
+
+    Args:
+        filepath: Path to Excel file, or exact https SharePoint-style URL matching
+            Excel Workbook.FullName when using COM (see excel_list_open_workbooks).
+        sheet_name: Name of worksheet
+        start_cell: Starting cell (default A1); used range when end_cell omitted
+        end_cell: Optional ending cell
+        max_rows: Maximum data rows returned (default 10000); sets truncated when exceeded
+        workbook_transport: Workbook execution mode (auto, file, com)
+
+    Returns:
+        JSON string with sheet_name, range, headers, rows, row_count, truncated, max_rows.
+        First row of the range is treated as column headers; remaining rows are data.
+    """
+    try:
+        return _workbook_dispatch(
+            "export_worksheet_table",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.export_worksheet_table(
+                fp,
+                sheet_name,
+                start_cell,
+                end_cell,
+                max_rows,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.export_worksheet_table(
+                    fp,
+                    sheet_name,
+                    start_cell,
+                    end_cell,
+                    max_rows,
                 )
             ),
         )
     except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
     except Exception as e:
-        logger.error(f"Error reading data: {e}")
+        logger.error(f"Error exporting worksheet table: {e}")
         raise
 
 @mcp.tool(
@@ -555,17 +657,60 @@ def excel_list_open_workbooks(detail: Optional[str] = None) -> str:
 
     Use each ``full_name`` (disk path or https SharePoint-style URL per Excel) with
     ``get_workbook_metadata`` and other filepath-based tools. COM-only; no ``filepath``.
-    ``detail`` is reserved for future output levels and is ignored.
+
+    ``detail``: ``minimal`` (default) lists workbooks only; ``active_context`` also
+    returns ``active_workbook``, ``active_sheet``, and ``selection``.
 
     Requires Windows with ``excel-com-mcp[com]`` and a running Excel instance.
     """
-    del detail
     try:
         if _COM_WORKBOOK_SERVICE is None:
             return "Error: Excel COM automation is not available on this host."
-        return _COM_WORKBOOK_SERVICE.list_open_workbooks()
+        return _COM_WORKBOOK_SERVICE.list_open_workbooks(detail=detail)
     except Exception as e:
         logger.error(f"excel_list_open_workbooks: {e}")
+        raise
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Evaluate Range (COM Recalc)",
+        destructiveHint=True,
+    ),
+)
+def evaluate_range(
+    filepath: str,
+    sheet_name: str,
+    start_cell: Optional[str] = None,
+    end_cell: Optional[str] = None,
+    workbook_transport: Optional[str] = None,
+) -> str:
+    """Force Excel to recalculate a worksheet or range before COM reads.
+
+    COM-only host side effect: updates in-memory Excel state only. Does **not** write
+    to disk — call ``save_workbook`` when subsequent ``workbook_transport=file`` reads
+    must see recalculated values. Omit ``start_cell`` to recalc the entire sheet.
+
+    ``workbook_transport=file`` is rejected (recalc cannot affect openpyxl reads).
+    """
+    try:
+        transport = resolve_workbook_transport(workbook_transport)
+        if transport == "file":
+            return (
+                "Error: evaluate_range requires COM (Excel host recalc). "
+                "workbook_transport=file is not supported; open the workbook in Excel "
+                "and omit transport or use com/auto."
+            )
+        resolved = get_excel_path(filepath)
+        if _COM_WORKBOOK_SERVICE is None:
+            return "Error: Excel COM automation is not available on this host."
+        return _COM_WORKBOOK_SERVICE.evaluate_range(
+            resolved, sheet_name, start_cell, end_cell
+        )
+    except ValueError as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"evaluate_range: {e}")
         raise
 
 

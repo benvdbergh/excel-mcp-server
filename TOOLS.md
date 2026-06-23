@@ -11,7 +11,7 @@ Every workbook tool takes **`filepath`** (sometimes shown as `filename` in older
 - **Finding the right string for an open cloud file:** In Excel, **VBA Immediate** → `? ActiveWorkbook.FullName`. If the result is an `https://` URL, pass that as **`filepath`**, not only the synced folder path on disk—otherwise COM may not match and **`auto`** can try **`openpyxl`** and fail with **permission denied** while Excel has the file open.
 - **Discovery (no guesswork):** Call **`excel_list_open_workbooks`** (Windows + COM, Excel running) to get a JSON list of open workbooks with exact **`full_name`** strings. Copy a **`full_name`** into **`get_workbook_metadata`**, **`read_data_from_excel`**, writes, and lifecycle tools—same flow as the VBA one-liner, but in the MCP contract ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)). Allowlist policy applies when you **use** a path or URL as **`filepath`**; discovery only **reports** what Excel has open.
 
-Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Session / host** tools **`excel_list_open_workbooks`** (ADR 0009), **`excel_open_workbook`**, and **`excel_close_workbook`** are **COM-only** and do not use the routing matrix (ADR 0008 / ADR 0009). Authentication for M365 is **Excel/Office**, not the MCP server.
+Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Session / host** tools **`excel_list_open_workbooks`** (ADR 0009), **`excel_open_workbook`**, **`excel_close_workbook`**, and **`evaluate_range`** are **COM-only** and do not use the routing matrix (ADR 0008 / ADR 0009). **`evaluate_range`** additionally rejects explicit **`workbook_transport=file`**. Authentication for M365 is **Excel/Office**, not the MCP server.
 
 ## Workbook routing parameters (all tools)
 
@@ -62,7 +62,7 @@ excel_close_workbook(filepath: str, save: bool = False) -> str
 
 ### excel_list_open_workbooks
 
-Enumerates **`Application.Workbooks`** in the running Excel instance and returns **JSON** (string payload) shaped as `{"workbooks": [{"full_name", "name", "is_active"}, ...]}`. **`full_name`** is the exact COM locator (absolute path or **`https://…`** SharePoint-style URL); use it as **`filepath`** on routed tools. Order matches Excel’s workbook collection indexes (deterministic).
+Enumerates **`Application.Workbooks`** in the running Excel instance and returns **JSON** (string payload). Default **`detail=minimal`**: `{"workbooks": [{"full_name", "name", "is_active"}, ...]}`. **`detail=active_context`** adds top-level **`active_workbook`**, **`active_sheet`**, and **`selection`** (same minimal workbook list). **`full_name`** is the exact COM locator (absolute path or **`https://…`** SharePoint-style URL); use it as **`filepath`** on routed tools. Order matches Excel’s workbook collection indexes (deterministic).
 
 **Workflow:** discovery → choose **`full_name`** → **`get_workbook_metadata`** / **`read_data_from_excel`** / writes / **`excel_close_workbook`** as needed. **`get_workbook_metadata`** still requires **`filepath`**; there is no overload that omits it ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)).
 
@@ -70,10 +70,30 @@ Enumerates **`Application.Workbooks`** in the running Excel instance and returns
 excel_list_open_workbooks(detail: str | None = None) -> str
 ```
 
-- **`detail`**: reserved for future richer output; ignored today.
+- **`detail`**: ``minimal`` (default) — workbook list only; ``active_context`` — also active workbook, sheet name, and current selection address (e.g. ``B2:D5``).
 - **COM-only**, **no `filepath`**; **`workbook_transport`** does not apply.
 - **Empty list:** Excel is running but no workbooks are open (normal).
-- **Errors:** Same class of messages as other COM tools when **`excel-com-mcp[com]`** is missing or Excel is not running (“No running Excel application found”).
+- **Errors:** Same class of messages as other COM tools when **`excel-com-mcp[com]`** is missing or Excel is not running (“No running Excel application found”); invalid **`detail`** returns an explicit error.
+
+### evaluate_range
+
+Force Excel to **recalculate** formulas in a worksheet or cell range via COM **before** reads when the host may hold stale calculated values. **COM-only** side effect on the in-memory workbook; **does not flush to disk**. After recalc, use **`read_data_from_excel`** with **`workbook_transport=auto`** / **`com`** (workbook open in Excel). For on-disk snapshots, call **`save_workbook`** first, then read with **`workbook_transport=file`**.
+
+**Workflow:** discovery → open workbook → optional **`evaluate_range`** → COM read (or **`save_workbook`** then file read).
+
+```python
+evaluate_range(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str | None = None,
+    end_cell: str | None = None,
+    workbook_transport: str | None = None,
+) -> str
+```
+
+- **`start_cell` / `end_cell`:** omit both to recalc the entire sheet; provide **`start_cell`** only for one cell; both for a rectangular range.
+- **`workbook_transport=file`:** rejected with an explicit error (recalc cannot affect openpyxl reads).
+- **Errors:** COM unavailable, Excel not running, workbook not open, or invalid cell references — same patterns as other COM session tools.
 
 ### save_workbook
 
@@ -149,18 +169,111 @@ read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: str = None,
-    preview_only: bool = False,
+    workbook_transport: str | None = None,
+    include_routing_metadata: bool = False,
+    value_mode: str = "value",
+    metadata_mode: str = "full",
+) -> str
+```
+
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top; SharePoint-style `https://…` URLs per [ADR 0006](docs/architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md); use `excel_list_open_workbooks` → `full_name` per ADR 0009)
+- `sheet_name`: Source worksheet name
+- `start_cell`: Starting cell (default: "A1")
+- `end_cell`: Optional ending cell (auto-expands when omitted)
+- `workbook_transport`: same workbook routing parameter as all routed tools (see table above; ADR 0001)
+- `include_routing_metadata`: When `true`, wrap successful JSON in the ADR 0010 envelope (see below). Default `false` for backward compatibility.
+- `value_mode`: How cell values are returned — `"value"` (default, raw `Value2` / `cell.value`) or `"text"` (display text). Unknown values return an actionable error.
+- `metadata_mode`: Per-cell metadata density — `"full"` (default, includes per-cell `validation` objects) or `"compact"` (omits per-cell validation to reduce payload size on large ranges). Root JSON echoes `"metadata_mode"`.
+- Returns: JSON string with per-cell metadata. Root JSON includes `"value_mode"` and `"metadata_mode"`.
+
+**`metadata_mode` trade-offs:**
+
+| Mode | Payload | Validation detail | When to use |
+|------|---------|-------------------|-------------|
+| `"full"` (default) | Larger; every cell may include a `validation` object (`has_validation: false` when absent) | Full per-cell rules (types, lists, prompts) | Small ranges, data-quality checks, form auditing |
+| `"compact"` | Smaller; cells are `address`, `value`, `row`, `column` only | None per cell | Large rectangular reads where values matter more than validation |
+
+For very large tabular exports (e.g. >50 rows), prefer **`export_worksheet_table`** instead of `read_data_from_excel` with `metadata_mode=compact` — it returns headers + row arrays without per-cell addressing overhead. Use `get_data_validation_info` when you need worksheet-level validation rules without reading cell values.
+
+**`value_mode` and backends:**
+
+| `value_mode` | COM backend | File backend (openpyxl) |
+|--------------|-------------|-------------------------|
+| `"value"` (default) | `Range.Value2` | `cell.value` |
+| `"text"` | `Range.Text` (Excel display string) | Best-effort formatted string from `number_format`; **weaker fidelity** than COM — locale, conditional formats, and rich display rules are not reproduced. Prefer COM when exact display text matters. |
+
+**Routing metadata envelope (ADR 0010):** When `include_routing_metadata=true`, the tool returns:
+
+```json
+{
+  "result": { },
+  "_meta": {
+    "workbook_transport": "auto",
+    "workbook_backend": "com",
+    "routing_reason": "full_name_match",
+    "duration_ms": 12.345
+  },
+  "warnings": []
+}
+```
+
+- `_meta.workbook_backend` reflects the **executed** backend (`file` or `com`). Use it to verify COM routed reads after `workbook_transport=auto`.
+- Failures still return plain `"Error: …"` strings (no envelope), even when `include_routing_metadata=true`.
+- Field names match NFR-3 / `excel-mcp.routing` log vocabulary ([ADR 0010](docs/architecture/adr/0010-mcp-tool-response-envelope.md)).
+
+**File backend formula limits (`.xlsm`):** The openpyxl file backend does **not** evaluate Excel formulas. For macro-enabled workbooks (`.xlsm`), reads may return `null` for formula cells when cached results are absent. Prefer **COM routing** (`workbook_transport=auto` or `com`) when the workbook is open in Excel so Excel evaluates formulas. When `include_routing_metadata=true` and the file backend reads a range containing formulas in an `.xlsm`, the envelope includes:
+
+```json
+{
+  "code": "file_backend_formula_not_evaluated",
+  "message": "The file (openpyxl) backend does not evaluate Excel formulas; cached values may be missing (null). Prefer COM routing (workbook_transport=auto or com) when the workbook is open in Excel."
+}
+```
+
+**Troubleshooting — sparse or missing COM read values:** On COM transport, bulk `Range.Value2` (or `Range.Text` when `value_mode="text"`) can return a dense matrix of `null` for grouped, filtered, or outline-heavy sheets while individual cells still hold data. The server probes up to 24 blank-looking bulk cells; when at least 3 direct cell reads are non-blank, it falls back to per-cell reads for the whole range. Ranges larger than 64 cells use stratified grid sampling (evenly spaced rows/columns) so late rows are not under-sampled; smaller ranges scan row-major from the top-left. If values still look wrong, confirm the workbook is open in Excel with COM routing (`workbook_transport=com` or `auto` with a matching open workbook).
+
+### export_worksheet_table
+
+Bulk-read a worksheet as a compact table (header row + data rows). Prefer this over repeated `read_data_from_excel` calls when exporting large rectangular regions (e.g. >50 rows).
+
+```python
+export_worksheet_table(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str = "A1",
+    end_cell: str = None,
+    max_rows: int = 10000,
     workbook_transport: str | None = None,
 ) -> str
 ```
 
-- `filepath`: Workbook path or cloud locator (see **filepath** section at top; SharePoint-style `https://…` URLs per [ADR 0006](docs/architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md))
+- `filepath`: Path to Excel file, or exact `https://` SharePoint-style URL matching Excel `Workbook.FullName` when using COM
 - `sheet_name`: Source worksheet name
-- `start_cell`: Starting cell (default: "A1")
-- `end_cell`: Optional ending cell (auto-expands when omitted)
-- `preview_only`: Whether to return only a preview
-- `workbook_transport`: same workbook routing parameter as all routed tools (see table above; ADR 0001)
-- Returns: JSON string with structured cell data (address, value, row, column, validation info when present)
+- `start_cell`: Starting cell (default `A1`); when `end_cell` is omitted, exports the sheet used range (file: openpyxl bounds; COM: `UsedRange`)
+- `end_cell`: Optional ending cell for a explicit rectangular range
+- `max_rows`: Cap on **data** rows returned (default `10000`); first row of the range is always treated as headers and is not counted toward this cap
+- `workbook_transport`: Workbook execution mode (`auto`, `file`, `com`)
+- Returns: JSON string with `sheet_name`, `range`, `headers`, `rows`, `row_count`, `truncated`, `max_rows`
+
+**Response shape:**
+
+```json
+{
+  "sheet_name": "Sheet1",
+  "range": "A1:F100",
+  "headers": ["Col1", "Col2"],
+  "rows": [["a", 1], ["b", 2]],
+  "row_count": 99,
+  "truncated": false,
+  "max_rows": 10000
+}
+```
+
+- `headers`: values from the first row of the exported range
+- `rows`: remaining rows as a compact matrix (no per-cell metadata)
+- `row_count`: total data rows in the range (excluding the header row), before truncation
+- `truncated`: `true` when `row_count` exceeds `max_rows` (response `rows` is capped)
+
 
 ## Formatting Operations
 

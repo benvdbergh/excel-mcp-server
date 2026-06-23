@@ -13,6 +13,7 @@ This folder records decisions that shape the Excel MCP workbook transport fork a
 | [0007](0007-com-read-class-tools-routing.md) | COM routing for read-class tools *(superseded by 0008)* |
 | [0008](0008-com-first-default-and-file-lifecycle-tools.md) | COM-first default routing, explicit file lifecycle tools, `save_after_write` removal *(accepted)* |
 | [0009](0009-open-workbook-discovery-tool.md) | Open workbook discovery tool (workbook-level enumeration); `get_workbook_metadata` stays single-book *(accepted)* |
+| [0010](0010-mcp-tool-response-envelope.md) | MCP tool response envelope — opt-in `_meta`, warnings, error vs success policy *(accepted)* |
 
 **Convention:** `Status` is one of *Proposed*, *Accepted*, *Superseded* (link to replacing ADR), *Deprecated*.
 

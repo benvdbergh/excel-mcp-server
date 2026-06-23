@@ -198,7 +198,7 @@ def test_dispatch_file_forced_cloud_returns_error_not_callable() -> None:
 
     rb = RoutingBackend(_FakeOpen(frozenset({_VALID_HTTPS})), com_execution_available=True, runtime_platform="win32")
     normalized = parse_cloud_workbook_locator(_VALID_HTTPS)
-    out, backend = execute_routed_workbook_operation(
+    out, backend, meta = execute_routed_workbook_operation(
         rb,
         _DUMMY,
         resolved_path=normalized,
@@ -225,7 +225,7 @@ def test_dispatch_auto_closed_workbook_cloud_returns_error_not_callable() -> Non
 
     rb = RoutingBackend(_FakeOpen(frozenset()), com_execution_available=True, runtime_platform="win32")
     normalized = parse_cloud_workbook_locator(_VALID_HTTPS)
-    out, backend = execute_routed_workbook_operation(
+    out, backend, meta = execute_routed_workbook_operation(
         rb,
         _DUMMY,
         resolved_path=normalized,

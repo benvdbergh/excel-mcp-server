@@ -42,7 +42,7 @@ uv run hatch build
 uv run python -m twine check dist/*
 ```
 
-The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` in `pyproject.toml`). A legacy console entrypoint **`excel-mcp-server`** is also installed. Examples below use **`excel-com-mcp`** for **`uvx`** and MCP JSON so they stay aligned with `manifest.json` → `server.mcp_config` (`command` / `args`).
+The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` in `pyproject.toml`). A legacy console entrypoint **`excel-mcp-server`** is also installed. **PyPI / registry** installs use **`uvx excel-com-mcp stdio`** (`manifest.json` → `server.mcp_config`); **local clone** installs use **`uv run --project … --extra com excel-com-mcp stdio`** ([`.cursor/mcp.json`](.cursor/mcp.json)).
 
 ## Operator documentation map
 
@@ -52,8 +52,8 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 | **[`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md)** | **SSOT** registry: Cursor agent ids (`user-excel`, `user-excel-local`), `mcp.json` keys (`excel`, `excel-local`), PyPI vs fork |
 | **[`TOOLS.md`](TOOLS.md)** | Per-tool reference; same `filepath` and `workbook_transport` rules apply to every workbook tool |
 | **Host MCP tool schemas** | Before the first Excel MCP call in a session, inspect host tool descriptors for **`filepath`**, **`workbook_transport`**, and **`sheet_name`**; full contract in [`TOOLS.md`](TOOLS.md) |
-| **`manifest.json`** | MCP catalog metadata and `mcp_config` (`uvx excel-com-mcp stdio`) |
-| **[`.cursor/mcp.json`](.cursor/mcp.json)** | Optional Cursor workspace server using `${workspaceFolder}` + `uv run --project …` (see [MCP server ids](docs/operator/mcp-server-ids.md) and [Stdio Transport](#1-stdio-transport-for-local-use)) |
+| **`manifest.json`** | MCP catalog metadata; `mcp_config` for PyPI/registry (`uvx excel-com-mcp stdio`); local fork uses [`.cursor/mcp.json`](.cursor/mcp.json) (see [Stdio Transport](#1-stdio-transport-for-local-use)) |
+| **[`.cursor/mcp.json`](.cursor/mcp.json)** | **Local-clone SSOT:** `excel-local` server with `${workspaceFolder}`, Windows COM extra, and operator env (see [MCP server ids](docs/operator/mcp-server-ids.md) and [Local clone in Cursor](#local-clone-in-cursor-this-repo)) |
 | **[`CHANGELOG.md`](CHANGELOG.md)** | Version-to-version release notes and breaking changes |
 | **[`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md)** | Epic/story delivery status for workbook routing |
 
@@ -90,22 +90,20 @@ uvx excel-com-mcp stdio
 
 Agent-visible server id: **`user-excel`**. See [`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md).
 
-**Local clone in Cursor (this repo):** MCP often starts `uv` with **no project working directory**, so `uv run --extra com …` fails with *“`--extra com` has no effect when used outside of a project`* and *`program not found`*. Pass the project explicitly with **`--project`** (absolute path to the folder that contains `pyproject.toml`):
+#### Local clone in Cursor (this repo)
+
+MCP often starts `uv` with **no project working directory**, so `uv run --extra com …` fails with *"`--extra com` has no effect when used outside of a project"* and *`program not found`*. Pass the project explicitly with **`--project`** (path to the folder that contains `pyproject.toml`). The repo ships [`.cursor/mcp.json`](.cursor/mcp.json) using **`${workspaceFolder}`** so Cursor resolves the clone automatically:
 
 ```json
 {
    "mcpServers": {
       "excel-local": {
          "command": "uv",
-         "args": [
-            "run",
-            "--project",
-            "C:/Users/YOU/mcp/excel-mcp-server",
-            "--extra",
-            "com",
-            "excel-com-mcp",
-            "stdio"
-         ]
+         "args": ["run", "--project", "${workspaceFolder}", "--extra", "com", "excel-com-mcp", "stdio"],
+         "env": {
+            "EXCEL_MCP_TRANSPORT": "auto",
+            "EXCEL_MCP_ALLOWED_URL_PREFIXES": "https://YOUR-TENANT.sharepoint.com/"
+         }
       }
    }
 }
@@ -113,9 +111,23 @@ Agent-visible server id: **`user-excel`**. See [`docs/operator/mcp-server-ids.md
 
 Agent-visible server id: **`user-excel-local`** (Cursor prefix). Full registry: [`docs/operator/mcp-server-ids.md`](docs/operator/mcp-server-ids.md).
 
-On Windows you can use `C:\\\\Users\\\\YOU\\\\...` instead of forward slashes. Omit `"com"` on non-Windows installs. You can add `"cwd"` with the same path as a hint for other tools, but **`--project` is what fixes `uv run`**.
+Replace **`YOUR-TENANT`** with your SharePoint tenant hostname. On Windows you can use `C:\\Users\\YOU\\...` instead of forward slashes. Omit `"com"` on non-Windows installs. You can add `"cwd"` with the same path as a hint for other tools, but **`--project` is what fixes `uv run`**.
 
-If Cursor logs **`Failed to spawn: excel-com-mcp`** / **`program not found`**, the client did not resolve the project for `uv run`: add **`--project`** with an absolute path to this repo (or use the workspace file [`.cursor/mcp.json`](.cursor/mcp.json), which passes `${workspaceFolder}`). Relying on **`cwd` alone is not enough** in many Cursor builds.
+> **Windows / COM only:** [`.cursor/mcp.json`](.cursor/mcp.json) includes `--extra com` for COM-first routing. On Linux/macOS, omit `"--extra", "com"` from `args` (the `com` extra pulls `pywin32`, which has no wheels there).
+
+**Operator env (FR-11):** When tightening scope, set **`EXCEL_MCP_ALLOWED_PATHS`** to allowed **directory** roots (`os.pathsep`-separated) alongside **`EXCEL_MCP_ALLOWED_URL_PREFIXES`** for `https://` workbook locators. With the path allowlist on, cloud URLs require at least one valid URL prefix (fail-closed). See [path allowlist](#optional-path-allowlist-excel_mcp_allowed_paths) and [URL prefix allowlist](#url-prefix-allowlist-for-cloud-locators-excel_mcp_allowed_url_prefixes). Example for a local clone with both policies:
+
+```json
+"env": {
+   "EXCEL_MCP_TRANSPORT": "auto",
+   "EXCEL_MCP_ALLOWED_PATHS": "E:\\Workbooks;E:\\SharedTemplates",
+   "EXCEL_MCP_ALLOWED_URL_PREFIXES": "https://YOUR-TENANT.sharepoint.com/"
+}
+```
+
+**Workbook transport (ADR [0001](docs/architecture/adr/0001-workbook-transport-vs-mcp-wire-transport.md)):** `EXCEL_MCP_TRANSPORT` in `env` sets the **default workbook backend** (`auto`, `file`, or `com`). This is **not** the MCP wire transport (stdio/SSE/HTTP). Most tools also accept optional **`workbook_transport`** per call; when provided, it **overrides** the env default for that invocation.
+
+If Cursor logs **`Failed to spawn: excel-com-mcp`** / **`program not found`**, the client did not resolve the project for `uv run`: ensure **`--project`** points at this repo (or rely on [`.cursor/mcp.json`](.cursor/mcp.json) with `${workspaceFolder}`). Relying on **`cwd` alone is not enough** in many Cursor builds. For a fixed absolute path instead of `${workspaceFolder}`, use forward slashes on Windows (e.g. `C:/Users/YOU/mcp/excel-mcp-server`).
 
 ### 2. SSE Transport (Server-Sent Events - Deprecated)
 

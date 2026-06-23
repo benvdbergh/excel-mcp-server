@@ -6,7 +6,8 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, TypedDict
 
 from excel_mcp.routing.routing_backend import (
     RoutingBackend,
@@ -27,6 +28,55 @@ _FILE_BACKEND_CLOUD_LOCATOR_ERROR = (
     "Error: The file (openpyxl) backend cannot use cloud HTTPS workbook URLs. "
     "Open the workbook in Excel and use workbook_transport auto or com (workbook must be open in Excel for COM routing)."
 )
+
+
+class RoutedDispatchMeta(TypedDict):
+    """Routing metadata for MCP response envelope (ADR 0010)."""
+
+    workbook_transport: WorkbookTransport
+    workbook_backend: WorkbookBackend
+    routing_reason: str
+    duration_ms: float
+
+
+class RoutedResponseWarning(TypedDict):
+    code: str
+    message: str
+
+
+FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE = "file_backend_formula_not_evaluated"
+FILE_BACKEND_FORMULA_NOT_EVALUATED_MESSAGE = (
+    "The file (openpyxl) backend does not evaluate Excel formulas; "
+    "cached values may be missing (null). Prefer COM routing "
+    "(workbook_transport=auto or com) when the workbook is open in Excel."
+)
+
+
+def file_backend_formula_not_evaluated_warning() -> RoutedResponseWarning:
+    """ADR 0010 warning when openpyxl reads formula cells without evaluation."""
+    return {
+        "code": FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
+        "message": FILE_BACKEND_FORMULA_NOT_EVALUATED_MESSAGE,
+    }
+
+
+def build_routed_response_envelope(
+    result_text: str,
+    meta: RoutedDispatchMeta | Mapping[str, Any],
+    warnings: Sequence[RoutedResponseWarning | Mapping[str, str]] | None = None,
+) -> str:
+    """Serialize ADR 0010 success envelope around ``result_text``."""
+    try:
+        parsed = json.loads(result_text)
+        result: Any = parsed if isinstance(parsed, (dict, list)) else result_text
+    except json.JSONDecodeError:
+        result = result_text
+    envelope = {
+        "result": result,
+        "_meta": dict(meta),
+        "warnings": list(warnings or ()),
+    }
+    return json.dumps(envelope, ensure_ascii=False)
 
 
 def redact_workbook_path_for_logs(resolved_path: str) -> str:
@@ -61,7 +111,7 @@ def execute_routed_workbook_operation(
     com_operation_callable: Callable[[], str] | None = None,
     mcp_tool_name: str | None = None,
     logger: logging.Logger | None = None,
-) -> tuple[str, WorkbookBackend]:
+) -> tuple[str, WorkbookBackend, RoutedDispatchMeta]:
     """Resolve backend, run file or COM I/O, emit one structured log line.
 
     When resolution is ``backend="file"``, ``operation_callable`` runs (typically
@@ -71,8 +121,9 @@ def execute_routed_workbook_operation(
     provided; if it is ``None``, logs then raises
     :class:`ComExecutionNotImplementedError` (no silent file fallback).
 
-    Returns ``(result_text, executed_backend)`` where ``executed_backend`` is
-    ``"file"`` or ``"com"``.
+    Returns ``(result_text, executed_backend, routing_meta)`` where
+    ``executed_backend`` is ``"file"`` or ``"com"`` and ``routing_meta`` carries
+    ADR 0010 field names for optional MCP envelopes.
 
     ``file_workbook_service`` is required for handler wiring consistency; callers
     typically close over it inside ``operation_callable``. This module does not
@@ -96,6 +147,12 @@ def execute_routed_workbook_operation(
     pending_com: ComExecutionNotImplementedError | None = None
     result: str | None = None
     executed: WorkbookBackend | None = None
+    routing_meta: RoutedDispatchMeta = {
+        "workbook_transport": workbook_transport,
+        "workbook_backend": "file",
+        "routing_reason": "",
+        "duration_ms": 0.0,
+    }
     try:
         resolution = routing_backend.resolve_workbook_backend(
             resolved_path=resolved_path,
@@ -118,11 +175,18 @@ def execute_routed_workbook_operation(
     finally:
         if resolution is not None:
             duration_ms = (time.perf_counter() - t0) * 1000.0
+            backend_for_meta = executed if executed is not None else resolution.backend
+            routing_meta = {
+                "workbook_transport": workbook_transport,
+                "workbook_backend": backend_for_meta,
+                "routing_reason": resolution.reason,
+                "duration_ms": round(duration_ms, 3),
+            }
             payload: dict[str, object] = {
                 "workbook_transport": workbook_transport,
                 "workbook_backend": resolution.backend,
                 "routing_reason": resolution.reason,
-                "duration_ms": round(duration_ms, 3),
+                "duration_ms": routing_meta["duration_ms"],
                 "workbook_path": redact_workbook_path_for_logs(resolved_path),
                 "operation_name": operation_name,
             }
@@ -134,4 +198,4 @@ def execute_routed_workbook_operation(
     if pending_com is not None:
         raise pending_com
     assert result is not None and executed is not None
-    return result, executed
+    return result, executed, routing_meta

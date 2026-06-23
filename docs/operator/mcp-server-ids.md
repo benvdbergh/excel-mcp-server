@@ -56,7 +56,7 @@ On Windows fork installs, pass **`--project`** with an absolute path to the repo
 }
 ```
 
-Optional: add `env` (e.g. `EXCEL_MCP_ALLOWED_URL_PREFIXES` for SharePoint). Workspace file [`.cursor/mcp.json`](../../.cursor/mcp.json) ships the `excel-local` fork pattern for this repo.
+Optional: add `env` (e.g. `EXCEL_MCP_TRANSPORT`, `EXCEL_MCP_ALLOWED_URL_PREFIXES` for SharePoint). Workspace file [`.cursor/mcp.json`](../../.cursor/mcp.json) ships the `excel-local` fork pattern with example operator env for this repo.
 
 ## Deployment profiles (this operator)
 

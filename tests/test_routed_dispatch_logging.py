@@ -15,6 +15,7 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from excel_mcp.routing.routed_dispatch import (  # noqa: E402
+    build_routed_response_envelope,
     execute_routed_workbook_operation,
     redact_workbook_path_for_logs,
 )
@@ -54,7 +55,7 @@ def _last_json_record(caplog: pytest.LogCaptureFixture) -> dict:
 def test_dispatch_logs_required_fields_and_redacts_path(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger="excel-mcp.routing")
     rb = RoutingBackend(_FakeWorkbookOpen(frozenset()), runtime_platform="win32")
-    out, backend = execute_routed_workbook_operation(
+    out, backend, meta = execute_routed_workbook_operation(
         rb,
         _DUMMY,
         resolved_path=_PATH,
@@ -151,7 +152,7 @@ def test_com_backend_invokes_callable_no_not_implemented_error(
     def _no_file() -> str:
         raise AssertionError("file operation_callable must not run for COM backend")
 
-    out, backend = execute_routed_workbook_operation(
+    out, backend, meta = execute_routed_workbook_operation(
         rb,
         _DUMMY,
         resolved_path=_PATH,
@@ -165,6 +166,7 @@ def test_com_backend_invokes_callable_no_not_implemented_error(
     )
     assert out == sentinel
     assert backend == "com"
+    assert meta["workbook_backend"] == "com"
     data = _last_json_record(caplog)
     assert data["workbook_backend"] == "com"
     assert data["routing_reason"] == "full_name_match"
@@ -189,7 +191,7 @@ def test_dispatch_adr0004_v1_file_forced_auto_open_com_logs_flag(
         com_execution_available=True,
         runtime_platform="win32",
     )
-    out, backend = execute_routed_workbook_operation(
+    out, backend, meta = execute_routed_workbook_operation(
         rb,
         _DUMMY,
         resolved_path=_PATH,
@@ -237,9 +239,75 @@ def test_invalid_operation_name() -> None:
 
 def test_routing_package_exports_dispatch_helpers() -> None:
     from excel_mcp.routing import (  # noqa: E402
+        build_routed_response_envelope as env,
         execute_routed_workbook_operation as ex,
         redact_workbook_path_for_logs as red,
     )
 
     assert ex is execute_routed_workbook_operation
     assert red is redact_workbook_path_for_logs
+    assert env is build_routed_response_envelope
+
+
+def test_build_routed_response_envelope_with_warnings() -> None:
+    meta = {
+        "workbook_transport": "file",
+        "workbook_backend": "file",
+        "routing_reason": "forced_file",
+        "duration_ms": 3.0,
+    }
+    warning = {
+        "code": "file_backend_formula_not_evaluated",
+        "message": "test message",
+    }
+    raw = build_routed_response_envelope('{"range": "A1"}', meta, warnings=[warning])
+    data = json.loads(raw)
+    assert data["warnings"] == [warning]
+
+
+def test_build_routed_response_envelope_json_result() -> None:
+    meta = {
+        "workbook_transport": "auto",
+        "workbook_backend": "com",
+        "routing_reason": "full_name_match",
+        "duration_ms": 12.345,
+    }
+    raw = build_routed_response_envelope('{"range": "A1"}', meta)
+    data = json.loads(raw)
+    assert data["result"] == {"range": "A1"}
+    assert data["_meta"] == meta
+    assert data["warnings"] == []
+
+
+def test_build_routed_response_envelope_error_shaped_payload() -> None:
+    meta = {
+        "workbook_transport": "file",
+        "workbook_backend": "file",
+        "routing_reason": "forced_file",
+        "duration_ms": 1.0,
+    }
+    err = "Error: cloud locator on file backend"
+    raw = build_routed_response_envelope(err, meta)
+    data = json.loads(raw)
+    assert data["result"] == err
+    assert data["_meta"]["workbook_backend"] == "file"
+
+
+def test_dispatch_returns_routing_meta(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="excel-mcp.routing")
+    rb = RoutingBackend(_FakeWorkbookOpen(frozenset()), runtime_platform="win32")
+    _, backend, meta = execute_routed_workbook_operation(
+        rb,
+        _DUMMY,
+        resolved_path=_PATH,
+        workbook_transport="file",
+        tool_kind=ToolKind.READ,
+        com_strict=True,
+        operation_name="workbook_metadata",
+        operation_callable=lambda: "{}",
+    )
+    assert backend == "file"
+    assert meta["workbook_transport"] == "file"
+    assert meta["workbook_backend"] == "file"
+    assert meta["routing_reason"] == "forced_file"
+    assert meta["duration_ms"] >= 0

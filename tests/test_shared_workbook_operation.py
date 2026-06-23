@@ -37,7 +37,20 @@ class _AllRoutedOpsDummy:
         sheet_name: str,
         start_cell: str = "A1",
         end_cell: Optional[str] = None,
-        preview_only: bool = False,
+        *,
+        value_mode: str = "value",
+        metadata_mode: str = "full",
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
+    def export_worksheet_table(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: str = "A1",
+        end_cell: Optional[str] = None,
+        max_rows: int = 10000,
         *,
         operation_metadata: Optional[dict[str, Any]] = None,
     ) -> str:

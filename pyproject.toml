@@ -37,3 +37,8 @@ packages = ["src/excel_mcp"]
 
 [tool.hatch.build]
 packages = ["src/excel_mcp"]
+
+[tool.pytest.ini_options]
+markers = [
+    "requires_excel: needs a live Microsoft Excel instance (manual Windows RC; skipped in CI)",
+]
