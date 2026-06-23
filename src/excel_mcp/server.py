@@ -144,6 +144,8 @@ mcp = FastMCP(
         "Discovery: excel_list_open_workbooks (COM) for open workbook FullName locators (ADR 0009). "
         "Lifecycle: excel_open_workbook, excel_close_workbook (COM). create_workbook optional open_in_excel. "
         "Env: EXCEL_MCP_TRANSPORT, EXCEL_MCP_ALLOWED_PATHS, EXCEL_MCP_ALLOWED_URL_PREFIXES (with path allowlist). "
+        "Before first tool call in a session, inspect host MCP tool schemas for filepath, workbook_transport, and sheet_name; "
+        "full contract in TOOLS.md. "
         "Full operator docs: repository README and TOOLS.md; local Cursor MCP: README section on uv run --project."
     ),
 )
@@ -364,17 +366,23 @@ def read_data_from_excel(
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
-    
+
     Args:
-        filepath: Path to Excel file
+        filepath: Absolute local path, or for COM/cloud workbooks the exact ``https://…``
+            SharePoint-style URL matching Excel ``Workbook.FullName`` (ADR 0006). Call
+            ``excel_list_open_workbooks`` and copy a ``full_name`` when unsure (ADR 0009).
         sheet_name: Name of worksheet
         start_cell: Starting cell (default A1)
         end_cell: Ending cell (optional, auto-expands if not provided)
         preview_only: Whether to return preview only
-    
-    Returns:  
-    JSON string containing structured cell data with validation metadata.
-    Each cell includes: address, value, row, column, and validation info (if any).
+        workbook_transport: Optional execution mode ``auto`` | ``file`` | ``com`` (ADR 0001;
+            default from ``EXCEL_MCP_TRANSPORT`` env). Not the MCP wire transport.
+            With ``auto``/``com``, reads the live Excel grid (ADR 0008), not necessarily
+            the last saved file on disk.
+
+    Returns:
+        JSON string containing structured cell data with validation metadata.
+        Each cell includes: address, value, row, column, and validation info (if any).
     """
     try:
         return _workbook_dispatch(

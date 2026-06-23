@@ -77,7 +77,7 @@ excel_list_open_workbooks(detail: str | None = None) -> str
 
 ### save_workbook
 
-Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Lets agents flush host state before `read_data_from_excel` when using COM (ADR 0003).
+Persist the workbook to disk via the routed backend (openpyxl file path, or Excel COM when routed to COM). Call when you need an **on-disk** snapshot (external tools, `workbook_transport=file`, or after COM writes before file-backed reads). COM-first reads (`workbook_transport=auto`/`com`) use the **live Excel grid** and do not require `save_workbook` first (ADR 0008; ADR 0003 disk semantics).
 
 ```python
 save_workbook(
@@ -137,7 +137,11 @@ write_data_to_excel(
 
 ### read_data_from_excel
 
-Read data from Excel worksheet.
+Read data from Excel worksheet with per-cell validation metadata.
+
+**Discovery workflow ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)):** `excel_list_open_workbooks` → copy `full_name` → pass as `filepath` below (same as VBA `? ActiveWorkbook.FullName`).
+
+**COM-first reads ([ADR 0008](docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)):** With `workbook_transport=auto` or `com`, values come from the **live Excel session**, not necessarily the last saved file on disk. Use `workbook_transport=file` only when you need the on-disk snapshot.
 
 ```python
 read_data_from_excel(
@@ -145,16 +149,18 @@ read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: str = None,
-    preview_only: bool = False
+    preview_only: bool = False,
+    workbook_transport: str | None = None,
 ) -> str
 ```
 
-- `filepath`: Path to Excel file
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top; SharePoint-style `https://…` URLs per [ADR 0006](docs/architecture/adr/0006-cloud-workbook-locator-sharepoint-urls.md))
 - `sheet_name`: Source worksheet name
 - `start_cell`: Starting cell (default: "A1")
-- `end_cell`: Optional ending cell
+- `end_cell`: Optional ending cell (auto-expands when omitted)
 - `preview_only`: Whether to return only a preview
-- Returns: String representation of data
+- `workbook_transport`: same workbook routing parameter as all routed tools (see table above; ADR 0001)
+- Returns: JSON string with structured cell data (address, value, row, column, validation info when present)
 
 ## Formatting Operations
 
