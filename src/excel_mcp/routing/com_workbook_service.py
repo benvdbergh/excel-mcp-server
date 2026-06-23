@@ -1104,6 +1104,64 @@ class ComWorkbookService:
         what = "saved and closed" if save else "closed without saving"
         return f"Workbook closed in Excel ({what}): {filepath}"
 
+    def evaluate_range(
+        self,
+        filepath: str,
+        sheet_name: str,
+        start_cell: Optional[str] = None,
+        end_cell: Optional[str] = None,
+    ) -> str:
+        """Force Excel to recalculate a worksheet or range (COM-only side effect)."""
+        return self._executor.submit(
+            self._evaluate_range_com,
+            filepath,
+            sheet_name,
+            start_cell,
+            end_cell,
+        )
+
+    @staticmethod
+    def _evaluate_range_com(
+        filepath: str,
+        sheet_name: str,
+        start_cell: Optional[str],
+        end_cell: Optional[str],
+    ) -> str:
+        from excel_mcp.cell_utils import validate_cell_reference
+
+        if end_cell is not None and start_cell is None:
+            return "Error: end_cell requires start_cell"
+        if start_cell is not None and not validate_cell_reference(start_cell):
+            return f"Error: Invalid start cell reference: {start_cell}"
+        if end_cell is not None and not validate_cell_reference(end_cell):
+            return f"Error: Invalid end cell reference: {end_cell}"
+
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        if err:
+            return err
+        try:
+            ws = wb_com.Worksheets(sheet_name)
+        except Exception:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        try:
+            if start_cell is None:
+                ws.Calculate()
+                scope = f"sheet '{sheet_name}'"
+            elif end_cell is None:
+                ws.Range(start_cell).Calculate()
+                scope = f"range {start_cell}"
+            else:
+                ws.Range(start_cell, end_cell).Calculate()
+                scope = f"range {start_cell}:{end_cell}"
+        except Exception as exc:
+            return f"Error: {exc}"
+
+        return (
+            f"Recalculated {scope} via Excel COM (in-memory only; "
+            f"call save_workbook to flush to disk for file-based reads)"
+        )
+
     def list_open_workbooks(self) -> str:
         """Enumerate ``Application.Workbooks`` on the COM thread (ADR 0009).
 

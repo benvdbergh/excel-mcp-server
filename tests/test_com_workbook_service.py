@@ -679,6 +679,68 @@ def test_list_open_workbooks_no_running_excel():
     assert msg == "Error: No running Excel application found"
 
 
+def test_evaluate_range_whole_sheet(book_path):
+    ws = MagicMock()
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range(book_path, "Sheet1")
+
+    ws.Calculate.assert_called_once()
+    assert "Recalculated sheet 'Sheet1'" in msg
+    assert "save_workbook" in msg
+
+
+def test_evaluate_range_cell_range(book_path):
+    ws = MagicMock()
+    rng = MagicMock()
+    ws.Range = MagicMock(return_value=rng)
+    wb = _workbook_mock(book_path, {"Sheet1": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range(book_path, "Sheet1", "A1", "B2")
+
+    ws.Range.assert_called_once_with("A1", "B2")
+    rng.Calculate.assert_called_once()
+    assert "range A1:B2" in msg
+
+
+def test_evaluate_range_workbook_not_open(book_path):
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 0
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range(book_path, "Sheet1")
+
+    assert msg.startswith("Error:") and "Workbook" in msg
+
+
+def test_evaluate_range_no_running_excel():
+    client_mod = types.ModuleType("win32com.client")
+    client_mod.GetActiveObject = MagicMock(side_effect=RuntimeError("RPC"))
+    pkg = types.ModuleType("win32com")
+    pkg.client = client_mod
+    modules = {"win32com": pkg, "win32com.client": client_mod}
+
+    with patch.dict(sys.modules, modules, clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.evaluate_range("C:\\fake\\book.xlsx", "Sheet1")
+
+    assert msg == "Error: No running Excel application found"
+
+
 def test_export_worksheet_table_com_backend(book_path):
     ws = MagicMock()
     rng = MagicMock()

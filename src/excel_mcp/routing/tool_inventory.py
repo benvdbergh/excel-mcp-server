@@ -93,6 +93,10 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
         ToolKind.SESSION,
         notes="ADR 0009: enumerate Application.Workbooks; no filepath routing.",
     ),
+    "evaluate_range": ToolInventoryEntry(
+        ToolKind.SESSION,
+        notes="COM-only recalc before reads; does not persist to disk (BEN-129).",
+    ),
 }
 
 MCP_TOOL_INVENTORY: Final[Mapping[str, ToolInventoryEntry]] = MappingProxyType(

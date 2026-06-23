@@ -11,7 +11,7 @@ Every workbook tool takes **`filepath`** (sometimes shown as `filename` in older
 - **Finding the right string for an open cloud file:** In Excel, **VBA Immediate** → `? ActiveWorkbook.FullName`. If the result is an `https://` URL, pass that as **`filepath`**, not only the synced folder path on disk—otherwise COM may not match and **`auto`** can try **`openpyxl`** and fail with **permission denied** while Excel has the file open.
 - **Discovery (no guesswork):** Call **`excel_list_open_workbooks`** (Windows + COM, Excel running) to get a JSON list of open workbooks with exact **`full_name`** strings. Copy a **`full_name`** into **`get_workbook_metadata`**, **`read_data_from_excel`**, writes, and lifecycle tools—same flow as the VBA one-liner, but in the MCP contract ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)). Allowlist policy applies when you **use** a path or URL as **`filepath`**; discovery only **reports** what Excel has open.
 
-Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Session / host** tools **`excel_list_open_workbooks`** (ADR 0009), **`excel_open_workbook`**, and **`excel_close_workbook`** are **COM-only** and do not use the routing matrix (ADR 0008 / ADR 0009). Authentication for M365 is **Excel/Office**, not the MCP server.
+Optional **`workbook_transport`** (`auto` \| `file` \| `com`) applies to **routed** workbook tools (see table below). **Session / host** tools **`excel_list_open_workbooks`** (ADR 0009), **`excel_open_workbook`**, **`excel_close_workbook`**, and **`evaluate_range`** are **COM-only** and do not use the routing matrix (ADR 0008 / ADR 0009). **`evaluate_range`** additionally rejects explicit **`workbook_transport=file`**. Authentication for M365 is **Excel/Office**, not the MCP server.
 
 ## Workbook routing parameters (all tools)
 
@@ -74,6 +74,26 @@ excel_list_open_workbooks(detail: str | None = None) -> str
 - **COM-only**, **no `filepath`**; **`workbook_transport`** does not apply.
 - **Empty list:** Excel is running but no workbooks are open (normal).
 - **Errors:** Same class of messages as other COM tools when **`excel-com-mcp[com]`** is missing or Excel is not running (“No running Excel application found”).
+
+### evaluate_range
+
+Force Excel to **recalculate** formulas in a worksheet or cell range via COM **before** reads when the host may hold stale calculated values. **COM-only** side effect on the in-memory workbook; **does not flush to disk**. After recalc, use **`read_data_from_excel`** with **`workbook_transport=auto`** / **`com`** (workbook open in Excel). For on-disk snapshots, call **`save_workbook`** first, then read with **`workbook_transport=file`**.
+
+**Workflow:** discovery → open workbook → optional **`evaluate_range`** → COM read (or **`save_workbook`** then file read).
+
+```python
+evaluate_range(
+    filepath: str,
+    sheet_name: str,
+    start_cell: str | None = None,
+    end_cell: str | None = None,
+    workbook_transport: str | None = None,
+) -> str
+```
+
+- **`start_cell` / `end_cell`:** omit both to recalc the entire sheet; provide **`start_cell`** only for one cell; both for a rectangular range.
+- **`workbook_transport=file`:** rejected with an explicit error (recalc cannot affect openpyxl reads).
+- **Errors:** COM unavailable, Excel not running, workbook not open, or invalid cell references — same patterns as other COM session tools.
 
 ### save_workbook
 
