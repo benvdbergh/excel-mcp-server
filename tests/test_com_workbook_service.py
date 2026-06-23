@@ -408,6 +408,36 @@ def test_get_open_workbook_com_protected_view_only(book_path):
     )
 
 
+def test_get_open_workbook_com_protected_view_https_source_path() -> None:
+    u = "https://tenant.sharepoint.com/sites/s/Shared%20Documents/book.xlsx"
+    wb_pv = MagicMock()
+    wb_pv.FullName = u
+    wb_pv.ReadOnly = False
+    pv = MagicMock()
+    pv.Workbook = wb_pv
+    pv.SourcePath = "https://tenant.sharepoint.com/sites/s/Shared%20Documents/"
+    pv.SourceName = "book.xlsx"
+
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 0
+    xl.Workbooks.Item = MagicMock(side_effect=RuntimeError("no workbooks"))
+    pvw = MagicMock()
+    pvw.Count = 1
+    pvw.Item = MagicMock(side_effect=lambda i: pv if i == 1 else None)
+    xl.ProtectedViewWindows = pvw
+
+    with patch.dict(
+        sys.modules,
+        _fake_win32_modules(xl, protected_view_windows=pvw),
+        clear=False,
+    ):
+        wb_out, err = ComWorkbookService._get_open_workbook_com(u)
+
+    assert wb_out is None
+    assert "Protected View" in (err or "")
+
+
 def test_get_open_workbook_com_unsaved_single_workbook(book_path):
     wb = MagicMock()
     wb.FullName = "Book1"
