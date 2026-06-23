@@ -62,7 +62,7 @@ excel_close_workbook(filepath: str, save: bool = False) -> str
 
 ### excel_list_open_workbooks
 
-Enumerates **`Application.Workbooks`** in the running Excel instance and returns **JSON** (string payload) shaped as `{"workbooks": [{"full_name", "name", "is_active"}, ...]}`. **`full_name`** is the exact COM locator (absolute path or **`https://…`** SharePoint-style URL); use it as **`filepath`** on routed tools. Order matches Excel’s workbook collection indexes (deterministic).
+Enumerates **`Application.Workbooks`** in the running Excel instance and returns **JSON** (string payload). Default **`detail=minimal`**: `{"workbooks": [{"full_name", "name", "is_active"}, ...]}`. **`detail=active_context`** adds top-level **`active_workbook`**, **`active_sheet`**, and **`selection`** (same minimal workbook list). **`full_name`** is the exact COM locator (absolute path or **`https://…`** SharePoint-style URL); use it as **`filepath`** on routed tools. Order matches Excel’s workbook collection indexes (deterministic).
 
 **Workflow:** discovery → choose **`full_name`** → **`get_workbook_metadata`** / **`read_data_from_excel`** / writes / **`excel_close_workbook`** as needed. **`get_workbook_metadata`** still requires **`filepath`**; there is no overload that omits it ([ADR 0009](docs/architecture/adr/0009-open-workbook-discovery-tool.md)).
 
@@ -70,10 +70,10 @@ Enumerates **`Application.Workbooks`** in the running Excel instance and returns
 excel_list_open_workbooks(detail: str | None = None) -> str
 ```
 
-- **`detail`**: reserved for future richer output; ignored today.
+- **`detail`**: ``minimal`` (default) — workbook list only; ``active_context`` — also active workbook, sheet name, and current selection address (e.g. ``B2:D5``).
 - **COM-only**, **no `filepath`**; **`workbook_transport`** does not apply.
 - **Empty list:** Excel is running but no workbooks are open (normal).
-- **Errors:** Same class of messages as other COM tools when **`excel-com-mcp[com]`** is missing or Excel is not running (“No running Excel application found”).
+- **Errors:** Same class of messages as other COM tools when **`excel-com-mcp[com]`** is missing or Excel is not running (“No running Excel application found”); invalid **`detail`** returns an explicit error.
 
 ### evaluate_range
 
@@ -165,10 +165,10 @@ read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: str = None,
-    preview_only: bool = False,
     workbook_transport: str | None = None,
     include_routing_metadata: bool = False,
     value_mode: str = "value",
+    metadata_mode: str = "full",
 ) -> str
 ```
 
@@ -176,11 +176,20 @@ read_data_from_excel(
 - `sheet_name`: Source worksheet name
 - `start_cell`: Starting cell (default: "A1")
 - `end_cell`: Optional ending cell
-- `preview_only`: Whether to return only a preview
 - `workbook_transport`: Workbook execution mode (`auto`, `file`, `com`)
 - `include_routing_metadata`: When `true`, wrap successful JSON in the ADR 0010 envelope (see below). Default `false` for backward compatibility.
 - `value_mode`: How cell values are returned — `"value"` (default, raw `Value2` / `cell.value`) or `"text"` (display text). Unknown values return an actionable error.
-- Returns: JSON string with per-cell metadata (validation rules when present). Root JSON includes `"value_mode"`.
+- `metadata_mode`: Per-cell metadata density — `"full"` (default, includes per-cell `validation` objects) or `"compact"` (omits per-cell validation to reduce payload size on large ranges). Root JSON echoes `"metadata_mode"`.
+- Returns: JSON string with per-cell metadata. Root JSON includes `"value_mode"` and `"metadata_mode"`.
+
+**`metadata_mode` trade-offs:**
+
+| Mode | Payload | Validation detail | When to use |
+|------|---------|-------------------|-------------|
+| `"full"` (default) | Larger; every cell may include a `validation` object (`has_validation: false` when absent) | Full per-cell rules (types, lists, prompts) | Small ranges, data-quality checks, form auditing |
+| `"compact"` | Smaller; cells are `address`, `value`, `row`, `column` only | None per cell | Large rectangular reads where values matter more than validation |
+
+For very large tabular exports (e.g. >50 rows), prefer **`export_worksheet_table`** instead of `read_data_from_excel` with `metadata_mode=compact` — it returns headers + row arrays without per-cell addressing overhead. Use `get_data_validation_info` when you need worksheet-level validation rules without reading cell values.
 
 **`value_mode` and backends:**
 
@@ -207,6 +216,17 @@ read_data_from_excel(
 - `_meta.workbook_backend` reflects the **executed** backend (`file` or `com`). Use it to verify COM routed reads after `workbook_transport=auto`.
 - Failures still return plain `"Error: …"` strings (no envelope), even when `include_routing_metadata=true`.
 - Field names match NFR-3 / `excel-mcp.routing` log vocabulary ([ADR 0010](docs/architecture/adr/0010-mcp-tool-response-envelope.md)).
+
+**File backend formula limits (`.xlsm`):** The openpyxl file backend does **not** evaluate Excel formulas. For macro-enabled workbooks (`.xlsm`), reads may return `null` for formula cells when cached results are absent. Prefer **COM routing** (`workbook_transport=auto` or `com`) when the workbook is open in Excel so Excel evaluates formulas. When `include_routing_metadata=true` and the file backend reads a range containing formulas in an `.xlsm`, the envelope includes:
+
+```json
+{
+  "code": "file_backend_formula_not_evaluated",
+  "message": "The file (openpyxl) backend does not evaluate Excel formulas; cached values may be missing (null). Prefer COM routing (workbook_transport=auto or com) when the workbook is open in Excel."
+}
+```
+
+**Troubleshooting — sparse or missing COM read values:** On COM transport, bulk `Range.Value2` (or `Range.Text` when `value_mode="text"`) can return a dense matrix of `null` for grouped, filtered, or outline-heavy sheets while individual cells still hold data. The server probes up to 24 blank-looking bulk cells; when at least 3 direct cell reads are non-blank, it falls back to per-cell reads for the whole range. Ranges larger than 64 cells use stratified grid sampling (evenly spaced rows/columns) so late rows are not under-sampled; smaller ranges scan row-major from the top-left. If values still look wrong, confirm the workbook is open in Excel with COM routing (`workbook_transport=com` or `auto` with a matching open workbook).
 
 ### export_worksheet_table
 

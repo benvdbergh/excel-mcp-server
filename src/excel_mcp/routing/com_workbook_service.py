@@ -12,7 +12,7 @@ import numbers
 import os
 import re
 import uuid
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from openpyxl.utils import get_column_letter
 
@@ -26,7 +26,7 @@ from excel_mcp.data import (
 )
 from excel_mcp.exceptions import DataError
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
-from excel_mcp.routing.read_value_mode import validate_value_mode
+from excel_mcp.routing.read_value_mode import validate_metadata_mode, validate_value_mode
 from excel_mcp.routing.workbook_host_identity import (
     normalized_workbook_fullname,
     protected_view_candidate_paths,
@@ -109,6 +109,63 @@ def _workbook_fullname_norm(wb: Any) -> Optional[str]:
     return normalized_workbook_fullname(wb)
 
 
+_LIST_OPEN_WORKBOOKS_DETAIL_LEVELS = frozenset({"minimal", "active_context"})
+
+
+def _normalize_list_open_workbooks_detail(
+    detail: Optional[str],
+) -> Tuple[str, Optional[str]]:
+    """Return ``(level, error_message)``; error_message is set when invalid."""
+    if detail is None:
+        return "minimal", None
+    level = detail.strip().lower()
+    if level not in _LIST_OPEN_WORKBOOKS_DETAIL_LEVELS:
+        return (
+            "",
+            f"Error: Invalid detail {detail!r}; use 'minimal' or 'active_context'.",
+        )
+    return level, None
+
+
+def _com_active_context_fields(xl: Any) -> Dict[str, Any]:
+    """Active workbook, sheet name, and selection address from ``Excel.Application``."""
+    active_workbook: Optional[Dict[str, str]] = None
+    active_sheet: Optional[str] = None
+    selection: Optional[str] = None
+
+    try:
+        aw = xl.ActiveWorkbook
+        if aw is not None:
+            active_workbook = {
+                "full_name": str(aw.FullName),
+                "name": str(aw.Name),
+            }
+    except Exception:
+        pass
+
+    try:
+        sheet = xl.ActiveSheet
+        if sheet is not None:
+            active_sheet = str(sheet.Name)
+    except Exception:
+        pass
+
+    try:
+        sel = xl.Selection
+        if sel is not None:
+            addr = str(getattr(sel, "Address", "")).replace("$", "")
+            if addr:
+                selection = addr
+    except Exception:
+        pass
+
+    return {
+        "active_workbook": active_workbook,
+        "active_sheet": active_sheet,
+        "selection": selection,
+    }
+
+
 def _hex_to_bgr_int(color: str) -> int:
     h = color.strip().lstrip("#").upper()
     if h.startswith("FF") and len(h) == 8:
@@ -186,6 +243,89 @@ def _direct_read_matrix_text_com(
     return out
 
 
+# Bulk-vs-direct sparsity probe limits (see TOOLS.md troubleshooting).
+_FALLBACK_LARGE_RANGE_CELLS = 64
+_FALLBACK_MAX_CHECKS = 24
+_FALLBACK_MISMATCH_THRESHOLD = 3
+
+
+def _evenly_spaced_indices(count: int, samples: int) -> List[int]:
+    """Return ``samples`` indices in ``[0, count)``, evenly spaced incl. endpoints."""
+    if count <= 0:
+        return []
+    if samples >= count:
+        return list(range(count))
+    if samples <= 1:
+        return [0]
+    step = (count - 1) / (samples - 1)
+    return [round(i * step) for i in range(samples)]
+
+
+def _fallback_sample_coords(
+    nrows: int, ncols: int, max_coords: int, *, stratified: bool
+) -> List[Tuple[int, int]]:
+    """Coordinates to probe for bulk-vs-direct sparsity anomalies."""
+    if not stratified:
+        return [(ir, ic) for ir in range(nrows) for ic in range(ncols)]
+    n_row_samples = max(1, min(nrows, int(max_coords**0.5) + 1))
+    n_col_samples = max(1, min(ncols, max(1, max_coords // n_row_samples)))
+    row_indices = _evenly_spaced_indices(nrows, n_row_samples)
+    col_indices = _evenly_spaced_indices(ncols, n_col_samples)
+    coords: List[Tuple[int, int]] = []
+    for ir in row_indices:
+        for ic in col_indices:
+            coords.append((ir, ic))
+            if len(coords) >= max_coords:
+                return coords
+    return coords
+
+
+def _should_fallback_to_direct_read_impl(
+    ws: Any,
+    matrix: List[List[Any]],
+    srow: int,
+    scol: int,
+    nrows: int,
+    ncols: int,
+    read_cell: Callable[[int, int], Any],
+) -> bool:
+    """Probe bulk matrix vs direct cell reads; fallback when mismatches accumulate.
+
+    Sampling: up to ``_FALLBACK_MAX_CHECKS`` blank-looking bulk cells; trigger when
+    ``_FALLBACK_MISMATCH_THRESHOLD`` direct reads are non-blank. Small ranges
+    (``rows * cols <= _FALLBACK_LARGE_RANGE_CELLS``) scan row-major from the top-left;
+    larger ranges use a stratified grid so late rows/columns are not under-sampled.
+    """
+    if nrows <= 0 or ncols <= 0:
+        return False
+
+    stratified = (nrows * ncols) > _FALLBACK_LARGE_RANGE_CELLS
+    coords = _fallback_sample_coords(
+        nrows, ncols, _FALLBACK_MAX_CHECKS, stratified=stratified
+    )
+    checked = 0
+    mismatches = 0
+    for ir, ic in coords:
+        if checked >= _FALLBACK_MAX_CHECKS:
+            break
+        row_vals = matrix[ir] if ir < len(matrix) else []
+        bulk_val = row_vals[ic] if ic < len(row_vals) else None
+        if not _is_blankish_excel_value(bulk_val):
+            continue
+        r = srow + ir
+        c = scol + ic
+        try:
+            direct_val = read_cell(r, c)
+        except Exception:
+            direct_val = None
+        checked += 1
+        if not _is_blankish_excel_value(direct_val):
+            mismatches += 1
+            if mismatches >= _FALLBACK_MISMATCH_THRESHOLD:
+                return True
+    return False
+
+
 def _should_fallback_to_direct_read_com(
     ws: Any,
     matrix: List[List[Any]],
@@ -194,41 +334,16 @@ def _should_fallback_to_direct_read_com(
     nrows: int,
     ncols: int,
 ) -> bool:
-    """Detect COM ``Range.Value2`` sparsity anomalies and trigger direct cell reads.
-
-    Some workbooks (often with outline/group/filter-heavy layouts) can return a dense
-    shape with unexpectedly many ``None`` entries from bulk ``Range.Value2`` while
-    direct ``Cells(r, c).Value2`` still returns values. We sample only blank-looking
-    bulk cells to keep the fast path cheap.
-    """
-    if nrows <= 0 or ncols <= 0:
-        return False
-
-    max_checks = 24
-    checked = 0
-    mismatches = 0
-    for ir in range(nrows):
-        if checked >= max_checks:
-            break
-        row_vals = matrix[ir] if ir < len(matrix) else []
-        for ic in range(ncols):
-            if checked >= max_checks:
-                break
-            bulk_val = row_vals[ic] if ic < len(row_vals) else None
-            if not _is_blankish_excel_value(bulk_val):
-                continue
-            r = srow + ir
-            c = scol + ic
-            try:
-                direct_val = ws.Cells(r, c).Value2
-            except Exception:
-                direct_val = None
-            checked += 1
-            if not _is_blankish_excel_value(direct_val):
-                mismatches += 1
-                if mismatches >= 3:
-                    return True
-    return False
+    """Detect COM ``Range.Value2`` sparsity anomalies and trigger direct cell reads."""
+    return _should_fallback_to_direct_read_impl(
+        ws,
+        matrix,
+        srow,
+        scol,
+        nrows,
+        ncols,
+        lambda r, c: ws.Cells(r, c).Value2,
+    )
 
 
 def _should_fallback_to_direct_read_text_com(
@@ -240,34 +355,15 @@ def _should_fallback_to_direct_read_text_com(
     ncols: int,
 ) -> bool:
     """Detect bulk ``Range.Text`` sparsity anomalies (mirrors Value2 resiliency)."""
-    if nrows <= 0 or ncols <= 0:
-        return False
-
-    max_checks = 24
-    checked = 0
-    mismatches = 0
-    for ir in range(nrows):
-        if checked >= max_checks:
-            break
-        row_vals = matrix[ir] if ir < len(matrix) else []
-        for ic in range(ncols):
-            if checked >= max_checks:
-                break
-            bulk_val = row_vals[ic] if ic < len(row_vals) else None
-            if not _is_blankish_excel_value(bulk_val):
-                continue
-            r = srow + ir
-            c = scol + ic
-            try:
-                direct_val = ws.Cells(r, c).Text
-            except Exception:
-                direct_val = None
-            checked += 1
-            if not _is_blankish_excel_value(direct_val):
-                mismatches += 1
-                if mismatches >= 3:
-                    return True
-    return False
+    return _should_fallback_to_direct_read_impl(
+        ws,
+        matrix,
+        srow,
+        scol,
+        nrows,
+        ncols,
+        lambda r, c: ws.Cells(r, c).Text,
+    )
 
 
 def _read_range_matrix_com(
@@ -644,14 +740,15 @@ class ComWorkbookService:
         sheet_name: str,
         start_cell: str = "A1",
         end_cell: Optional[str] = None,
-        preview_only: bool = False,
         *,
         value_mode: str = "value",
+        metadata_mode: str = "full",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         del operation_metadata
         try:
             validate_value_mode(value_mode)
+            validate_metadata_mode(metadata_mode)
         except ValueError as e:
             return f"Error: {e}"
         return self._executor.submit(
@@ -660,8 +757,8 @@ class ComWorkbookService:
             sheet_name,
             start_cell,
             end_cell,
-            preview_only,
             value_mode,
+            metadata_mode,
         )
 
     @staticmethod
@@ -670,11 +767,10 @@ class ComWorkbookService:
         sheet_name: str,
         start_cell: str,
         end_cell: Optional[str],
-        preview_only: bool,
         value_mode: str = "value",
+        metadata_mode: str = "full",
     ) -> str:
-        del preview_only
-        include_validation = True
+        include_validation = metadata_mode == "full"
         raw_start = start_cell.strip()
         ec: Optional[str] = end_cell
         if ":" in raw_start and ec is None:
@@ -724,6 +820,7 @@ class ComWorkbookService:
                     "range": f"{get_column_letter(scol)}{srow}:",
                     "sheet_name": sheet_name,
                     "value_mode": value_mode,
+                    "metadata_mode": metadata_mode,
                     "cells": [],
                 },
                 indent=2,
@@ -737,6 +834,7 @@ class ComWorkbookService:
             "range": range_str,
             "sheet_name": sheet_name,
             "value_mode": value_mode,
+            "metadata_mode": metadata_mode,
             "cells": [],
         }
 
@@ -1179,18 +1277,22 @@ class ComWorkbookService:
             f"call save_workbook to flush to disk for file-based reads)"
         )
 
-    def list_open_workbooks(self) -> str:
+    def list_open_workbooks(self, detail: Optional[str] = None) -> str:
         """Enumerate ``Application.Workbooks`` on the COM thread (ADR 0009).
 
-        Returns a JSON string ``{"workbooks": [...]}``. Each entry includes
-        ``full_name`` (exact COM locator), ``name``, and ``is_active``.
-        Order matches Excel's ``Workbooks`` collection indices (1 .. Count).
+        ``detail`` is ``minimal`` (default) or ``active_context`` (adds active
+        workbook, sheet, and selection). Returns a JSON string.
         """
-        return self._executor.submit(ComWorkbookService._list_open_workbooks_com)
+        return self._executor.submit(
+            ComWorkbookService._list_open_workbooks_com, detail
+        )
 
     @staticmethod
-    def _list_open_workbooks_com() -> str:
+    def _list_open_workbooks_com(detail: Optional[str] = None) -> str:
         """Walk ``Workbooks`` for ``GetActiveObject("Excel.Application")``."""
+        level, detail_err = _normalize_list_open_workbooks_detail(detail)
+        if detail_err is not None:
+            return detail_err
         try:
             import win32com.client
         except ModuleNotFoundError:
@@ -1242,7 +1344,10 @@ class ComWorkbookService:
                 }
             )
 
-        return json.dumps({"workbooks": entries}, ensure_ascii=False)
+        payload: Dict[str, Any] = {"workbooks": entries}
+        if level == "active_context":
+            payload.update(_com_active_context_fields(xl))
+        return json.dumps(payload, ensure_ascii=False)
 
     def apply_formula(
         self,

@@ -31,7 +31,7 @@ from excel_mcp.routing import (
     resolve_workbook_transport,
 )
 from excel_mcp.routing.routed_dispatch import build_routed_response_envelope
-from excel_mcp.routing.read_value_mode import validate_value_mode
+from excel_mcp.routing.read_value_mode import validate_metadata_mode, validate_value_mode
 from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
 from excel_mcp.routing.routing_errors import (
     ComExecutionNotImplementedError,
@@ -100,6 +100,7 @@ def _workbook_dispatch(
     com_do_op: Callable[[str], str] | None = None,
     *,
     include_routing_metadata: bool = False,
+    response_warnings: list | None = None,
 ) -> str:
     """Resolve path, route transport, run one contract op."""
     full_path = get_excel_path(filepath)
@@ -123,7 +124,11 @@ def _workbook_dispatch(
         mcp_tool_name=mcp_tool_name,
     )
     if include_routing_metadata:
-        return build_routed_response_envelope(out, routing_meta)
+        return build_routed_response_envelope(
+            out,
+            routing_meta,
+            warnings=list(response_warnings or ()),
+        )
     return out
 
 
@@ -366,10 +371,10 @@ def read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    preview_only: bool = False,
     workbook_transport: Optional[str] = None,
     include_routing_metadata: bool = False,
     value_mode: str = "value",
+    metadata_mode: str = "full",
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
@@ -380,44 +385,64 @@ def read_data_from_excel(
         sheet_name: Name of worksheet
         start_cell: Starting cell (default A1)
         end_cell: Ending cell (optional, auto-expands if not provided)
-        preview_only: Whether to return preview only
         workbook_transport: Workbook execution mode (auto, file, com)
         include_routing_metadata: When true, wrap JSON in ADR 0010 envelope with
             _meta (workbook_transport, workbook_backend, routing_reason, duration_ms)
+            and optional warnings (e.g. file_backend_formula_not_evaluated on .xlsm).
         value_mode: ``value`` (raw cell values) or ``text`` (display text; COM uses
             Range.Text; file backend is best-effort formatted string)
+        metadata_mode: ``full`` (per-cell validation metadata, default) or ``compact``
+            (omit per-cell validation to shrink large-range payloads)
+
+    File backend (openpyxl) does not evaluate formulas; ``.xlsm`` reads may return
+    null for formula cells. Prefer ``workbook_transport=auto`` or ``com`` when the
+    workbook is open in Excel. With ``include_routing_metadata=true``, that limit
+    surfaces as warning code ``file_backend_formula_not_evaluated``.
     
     Returns:  
     JSON string containing structured cell data with validation metadata.
     Each cell includes: address, value, row, column, and validation info (if any).
-    Root JSON includes ``value_mode``. When include_routing_metadata is true, the
+    Root JSON includes ``value_mode`` and ``metadata_mode``. When include_routing_metadata is true, the
     payload is wrapped per ADR 0010.
     """
     try:
         validate_value_mode(value_mode)
-        return _workbook_dispatch(
-            "read_data_from_excel",
-            filepath,
-            workbook_transport,
-            lambda fp: _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
+        validate_metadata_mode(metadata_mode)
+        routing_warnings: list = []
+
+        def _file_read(fp: str) -> str:
+            op_meta = (
+                {"_response_warnings": routing_warnings}
+                if include_routing_metadata
+                else None
+            )
+            return _FILE_WORKBOOK_SERVICE.read_range_with_metadata(
                 fp,
                 sheet_name,
                 start_cell,
                 end_cell,
-                preview_only,
                 value_mode=value_mode,
-            ),
+                metadata_mode=metadata_mode,
+                operation_metadata=op_meta,
+            )
+
+        return _workbook_dispatch(
+            "read_data_from_excel",
+            filepath,
+            workbook_transport,
+            _file_read,
             com_do_op=_com_dispatch(
                 lambda c, fp: c.read_range_with_metadata(
                     fp,
                     sheet_name,
                     start_cell,
                     end_cell,
-                    preview_only,
                     value_mode=value_mode,
+                    metadata_mode=metadata_mode,
                 )
             ),
             include_routing_metadata=include_routing_metadata,
+            response_warnings=routing_warnings if include_routing_metadata else None,
         )
     except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
         return f"Error: {str(e)}"
@@ -626,15 +651,16 @@ def excel_list_open_workbooks(detail: Optional[str] = None) -> str:
 
     Use each ``full_name`` (disk path or https SharePoint-style URL per Excel) with
     ``get_workbook_metadata`` and other filepath-based tools. COM-only; no ``filepath``.
-    ``detail`` is reserved for future output levels and is ignored.
+
+    ``detail``: ``minimal`` (default) lists workbooks only; ``active_context`` also
+    returns ``active_workbook``, ``active_sheet``, and ``selection``.
 
     Requires Windows with ``excel-com-mcp[com]`` and a running Excel instance.
     """
-    del detail
     try:
         if _COM_WORKBOOK_SERVICE is None:
             return "Error: Excel COM automation is not available on this host."
-        return _COM_WORKBOOK_SERVICE.list_open_workbooks()
+        return _COM_WORKBOOK_SERVICE.list_open_workbooks(detail=detail)
     except Exception as e:
         logger.error(f"excel_list_open_workbooks: {e}")
         raise

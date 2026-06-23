@@ -249,6 +249,22 @@ def test_routing_package_exports_dispatch_helpers() -> None:
     assert env is build_routed_response_envelope
 
 
+def test_build_routed_response_envelope_with_warnings() -> None:
+    meta = {
+        "workbook_transport": "file",
+        "workbook_backend": "file",
+        "routing_reason": "forced_file",
+        "duration_ms": 3.0,
+    }
+    warning = {
+        "code": "file_backend_formula_not_evaluated",
+        "message": "test message",
+    }
+    raw = build_routed_response_envelope('{"range": "A1"}', meta, warnings=[warning])
+    data = json.loads(raw)
+    assert data["warnings"] == [warning]
+
+
 def test_build_routed_response_envelope_json_result() -> None:
     meta = {
         "workbook_transport": "auto",

@@ -55,9 +55,9 @@ class WorkbookReadOperations(Protocol):
         sheet_name: str,
         start_cell: str = "A1",
         end_cell: Optional[str] = None,
-        preview_only: bool = False,
         *,
         value_mode: str = "value",
+        metadata_mode: str = "full",
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         """Range read including per-cell validation metadata (MCP: ``read_data_from_excel``)."""
