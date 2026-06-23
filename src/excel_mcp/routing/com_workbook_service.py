@@ -18,7 +18,13 @@ from openpyxl.utils import get_column_letter
 
 from excel_mcp.cell_utils import parse_cell_range, validate_cell_reference
 from excel_mcp.com_executor import ComThreadExecutor
-from excel_mcp.data import DEFAULT_EXPORT_MAX_ROWS, build_worksheet_table_payload
+from excel_mcp.data import (
+    DEFAULT_EXPORT_MAX_ROWS,
+    _export_read_end_row,
+    _normalize_export_max_rows,
+    build_worksheet_table_payload,
+)
+from excel_mcp.exceptions import DataError
 from excel_mcp.path_resolution import normalize_workbook_target_for_com
 from excel_mcp.routing.read_value_mode import validate_value_mode
 from excel_mcp.routing.workbook_host_identity import (
@@ -801,6 +807,11 @@ class ComWorkbookService:
         end_cell: Optional[str],
         max_rows: int,
     ) -> str:
+        try:
+            cap = _normalize_export_max_rows(max_rows)
+        except DataError as e:
+            return f"Error: {str(e)}"
+
         raw_start = start_cell.strip()
         ec: Optional[str] = end_cell
         if ":" in raw_start and ec is None:
@@ -847,14 +858,16 @@ class ComWorkbookService:
         if srow > umaxr or scol > umaxc:
             range_str = f"{get_column_letter(scol)}{srow}:"
             payload = build_worksheet_table_payload(
-                sheet_name, range_str, [], max_rows=max_rows
+                sheet_name, range_str, [], max_rows=cap
             )
             return json.dumps(payload, indent=2, default=str)
 
         range_str = (
             f"{get_column_letter(scol)}{srow}:{get_column_letter(ecol)}{erow}"
         )
-        nrows = erow - srow + 1
+        read_erow = _export_read_end_row(srow, erow, cap)
+        total_data_rows = max(0, erow - srow)
+        nrows = read_erow - srow + 1
         ncols = ecol - scol + 1
         try:
             top_left = ws.Cells(srow, scol)
@@ -866,7 +879,11 @@ class ComWorkbookService:
             return f"Error: {exc}"
 
         payload = build_worksheet_table_payload(
-            sheet_name, range_str, matrix, max_rows=max_rows
+            sheet_name,
+            range_str,
+            matrix,
+            max_rows=cap,
+            total_data_rows=total_data_rows,
         )
         return json.dumps(payload, indent=2, default=str)
 

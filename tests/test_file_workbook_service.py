@@ -225,3 +225,17 @@ def test_export_worksheet_table_max_rows_truncates(tmp_path) -> None:
     assert data["row_count"] == 5
     assert data["truncated"] is True
     assert data["max_rows"] == 2
+
+
+def test_export_worksheet_table_invalid_max_rows_file_backend(tmp_path) -> None:
+    p = tmp_path / "big.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["H"])
+    wb.save(p)
+    path = str(p.resolve())
+
+    svc = FileWorkbookService()
+    out = svc.export_worksheet_table(path, "Sheet1", max_rows=0)
+    assert out == "Error: max_rows must be a positive integer"

@@ -26,28 +26,38 @@ def _normalize_export_max_rows(max_rows: int | None) -> int:
     return max_rows
 
 
+def _export_read_end_row(start_row: int, end_row: int, cap: int) -> int:
+    """Last row to read when exporting: header row plus up to ``cap`` data rows."""
+    if end_row < start_row:
+        return start_row
+    total_data_rows = end_row - start_row
+    return start_row + min(total_data_rows, cap)
+
+
 def build_worksheet_table_payload(
     sheet_name: str,
     range_str: str,
     matrix: List[List[Any]],
     *,
     max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
+    total_data_rows: int | None = None,
 ) -> Dict[str, Any]:
     """Build compact table JSON from a rectangular cell matrix (first row = headers)."""
     cap = _normalize_export_max_rows(max_rows)
     if not matrix:
+        total = 0 if total_data_rows is None else max(0, total_data_rows)
         return {
             "sheet_name": sheet_name,
             "range": range_str,
             "headers": [],
             "rows": [],
-            "row_count": 0,
-            "truncated": False,
+            "row_count": total,
+            "truncated": total > cap,
             "max_rows": cap,
         }
     headers = list(matrix[0])
     data_rows = [list(row) for row in matrix[1:]]
-    total = len(data_rows)
+    total = total_data_rows if total_data_rows is not None else len(data_rows)
     truncated = total > cap
     return {
         "sheet_name": sheet_name,
@@ -327,7 +337,7 @@ def read_excel_range_with_metadata(
                 # Use the sheet's own boundaries, but respect the provided start_cell
                 end_row, end_col = ws.max_row, ws.max_column
                 # If start_cell is 'A1' (default), we should find the true start
-                if start_cell == 'A1':
+                if start_cell.upper() == "A1":
                     start_row, start_col = ws.min_row, ws.min_column
 
         # Validate range bounds
@@ -447,15 +457,21 @@ def export_excel_worksheet_table(
             f"{get_column_letter(start_col)}{start_row}:"
             f"{get_column_letter(end_col)}{end_row}"
         )
+        read_end_row = _export_read_end_row(start_row, end_row, cap)
+        total_data_rows = max(0, end_row - start_row)
         matrix: List[List[Any]] = []
-        for row in range(start_row, end_row + 1):
+        for row in range(start_row, read_end_row + 1):
             matrix.append(
                 [ws.cell(row=row, column=col).value for col in range(start_col, end_col + 1)]
             )
 
         wb.close()
         return build_worksheet_table_payload(
-            sheet_name, range_str, matrix, max_rows=cap
+            sheet_name,
+            range_str,
+            matrix,
+            max_rows=cap,
+            total_data_rows=total_data_rows,
         )
 
     except DataError:

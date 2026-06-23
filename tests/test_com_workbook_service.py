@@ -805,3 +805,12 @@ def test_export_worksheet_table_com_truncates(book_path):
     assert len(data["rows"]) == 2
     assert data["row_count"] == 3
     assert data["truncated"] is True
+    cell.Resize.assert_called_once_with(3, 1)
+
+
+def test_export_worksheet_table_com_invalid_max_rows(book_path):
+    with patch.dict(sys.modules, _fake_win32_modules(MagicMock()), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.export_worksheet_table(book_path, "Sheet1", max_rows=0)
+
+    assert raw == "Error: max_rows must be a positive integer"
