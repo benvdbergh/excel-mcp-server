@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import types
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1356,3 +1357,1033 @@ def test_map_sheet_layout_and_query_region_com_no_mutation(book_path):
     ws.ListObjects.Add.assert_not_called()
     lo.AutoFilter.ShowAllData.assert_not_called()
     lo.Sort.assert_not_called()
+
+
+def _view_list_object_mock(
+    *,
+    name: str,
+    header_addr: str,
+    column_names: list[str],
+    sheet_start_col: int,
+    filter_mode: bool = False,
+    prior_filter_on_field: int | None = None,
+    sort_capturable: bool = True,
+    sort_fields: list[tuple[str, str]] | None = None,
+    hidden_sheet_cols: set[int] | None = None,
+) -> tuple[MagicMock, MagicMock]:
+    """ListObject + worksheet mocks for apply/clear table view tests."""
+    hidden_sheet_cols = set(hidden_sheet_cols or ())
+    lo = MagicMock()
+    lo.Name = name
+    lo.HeaderRowRange.Address = header_addr
+    lo.Range = MagicMock()
+    lo.Range.AutoFilter = MagicMock()
+
+    cols = MagicMock()
+    cols.Count = len(column_names)
+
+    def _col_item(key):
+        if isinstance(key, int):
+            idx = key
+            col_name = column_names[key - 1]
+        else:
+            col_name = str(key)
+            idx = column_names.index(col_name) + 1
+        col = MagicMock()
+        col.Name = col_name
+        sheet_col = sheet_start_col + idx - 1
+        col.Range.Column = sheet_col
+        return col
+
+    cols.Item = MagicMock(side_effect=_col_item)
+    lo.ListColumns = cols
+
+    af = MagicMock()
+    af.FilterMode = filter_mode
+    af.ShowAllData = MagicMock()
+    filters = MagicMock()
+    if prior_filter_on_field is not None:
+        filters.Count = len(column_names)
+
+        def _filt_item(i: int):
+            f = MagicMock()
+            f.On = i == prior_filter_on_field
+            f.Criteria1 = "old" if f.On else None
+            f.Criteria2 = None
+            f.Operator = 0
+            return f
+
+        filters.Item = MagicMock(side_effect=_filt_item)
+    else:
+        filters.Count = 0
+        filters.Item = MagicMock(side_effect=lambda i: MagicMock(On=False))
+    af.Filters = filters
+    lo.AutoFilter = af
+
+    sort_obj = MagicMock()
+    sort_fields_coll = MagicMock()
+    recorded_sort: list = []
+
+    if sort_fields and sort_capturable:
+        sort_fields_coll.Count = len(sort_fields)
+
+        def _sf_item(i: int):
+            col_name, order = sort_fields[i - 1]
+            field_idx = column_names.index(col_name) + 1
+            sf = MagicMock()
+            sf.CustomOrder = None
+            sf.SortOn = 0
+            sf.Key.Column = sheet_start_col + field_idx - 1
+            sf.Order = 2 if order == "desc" else 1
+            return sf
+
+        sort_fields_coll.Item = MagicMock(side_effect=_sf_item)
+    elif not sort_capturable:
+        sort_fields_coll.Count = 1
+        sf = MagicMock()
+        sf.CustomOrder = "CustomList"
+        sf.SortOn = 0
+        sf.Key.Column = sheet_start_col
+        sf.Order = 1
+        sort_fields_coll.Item = MagicMock(return_value=sf)
+    else:
+        sort_fields_coll.Count = 0
+
+    def _sort_add(**kwargs):
+        recorded_sort.append(kwargs)
+        return MagicMock()
+
+    sort_fields_coll.Clear = MagicMock()
+    sort_fields_coll.Add = MagicMock(side_effect=_sort_add)
+    sort_obj.SortFields = sort_fields_coll
+    sort_obj.Apply = MagicMock()
+    sort_obj.Header = None
+    lo.Sort = sort_obj
+    lo._recorded_sort = recorded_sort  # type: ignore[attr-defined]
+
+    ws = MagicMock()
+    ws.Name = "software components"
+    ws.ListObjects.Count = 1
+    ws.ListObjects.Item = MagicMock(return_value=lo)
+    ws.ListObjects.Add = MagicMock(
+        side_effect=AssertionError("must not call ListObjects.Add")
+    )
+    ws.AutoFilterMode = False
+    ws.AutoFilter = MagicMock()
+    ws.AutoFilter.ShowAllData = MagicMock(
+        side_effect=AssertionError("must not clear via Worksheet.AutoFilter")
+    )
+    ws.Copy = MagicMock(side_effect=AssertionError("must not call Worksheet.Copy"))
+
+    col_state: dict[int, bool] = {c: True for c in hidden_sheet_cols}
+
+    def _columns(sheet_col: int):
+        col = MagicMock()
+
+        class _Entire:
+            @property
+            def Hidden(self):
+                return col_state.get(int(sheet_col), False)
+
+            @Hidden.setter
+            def Hidden(self, value):
+                col_state[int(sheet_col)] = bool(value)
+
+        col.EntireColumn = _Entire()
+        return col
+
+    ws.Columns = MagicMock(side_effect=_columns)
+    ws._col_state = col_state  # type: ignore[attr-defined]
+    lo.Parent = ws
+    return lo, ws
+
+
+def test_apply_table_view_com_filter_sort_focus_and_field_index(book_path):
+    # Table starts at column B → field 1 is sheet col 2, not column A.
+    lo, ws = _view_list_object_mock(
+        name="ap_sw_components",
+        header_addr="$B$2:$D$2",
+        column_names=["Name", "Qty", "Tag"],
+        sheet_start_col=2,
+        filter_mode=False,
+        sort_fields=[("Name", "asc")],
+    )
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "ap_sw_components"},
+        "columns": ["Name", "Qty"],
+        "where": [
+            {"column": "Tag", "op": "eq", "value": "x"},
+            {"column": "Qty", "op": "gte", "value": 2},
+        ],
+        "sort": {"by": [{"column": "Qty", "order": "asc"}]},
+    }
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(
+            svc.apply_table_view(book_path, view_spec, mode="in_place")
+        )
+
+    assert data["restore_token"]["table"] == "ap_sw_components"
+    assert data["restore_token"]["sort_applied"] is True
+    # Tag is field 3 (table-relative), not sheet column index.
+    applied_fields = [
+        (c.kwargs or {}).get("Field") for c in lo.Range.AutoFilter.call_args_list
+    ]
+    assert 3 in applied_fields  # Tag
+    assert 2 in applied_fields  # Qty
+    # Column focus hid Tag (sheet col 4) only.
+    assert data["restore_token"]["columns_hidden"] == [4]
+    assert ws._col_state.get(4) is True
+    assert lo._recorded_sort  # sort applied
+    ws.ListObjects.Add.assert_not_called()
+    ws.Copy.assert_not_called()
+
+
+def test_apply_table_view_com_two_value_xlor(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$B$1",
+        column_names=["Name", "Tag"],
+        sheet_start_col=1,
+    )
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name", "Tag"],
+        "where": [{"column": "Tag", "op": "in", "value": ["x", "y"]}],
+        "sort": None,
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        json.loads(svc.apply_table_view(book_path, view_spec))
+
+    kwargs = lo.Range.AutoFilter.call_args.kwargs
+    assert kwargs["Field"] == 2
+    assert kwargs["Criteria1"] == "x"
+    assert kwargs["Criteria2"] == "y"
+    assert kwargs["Operator"] == 2  # xlOr
+
+
+def test_apply_table_view_com_rejects_without_mutation(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$A$1",
+        column_names=["Name"],
+        sheet_start_col=1,
+    )
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    bad_specs = [
+        (
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [],
+                "sort": None,
+                "limit": 5,
+            },
+            "in_place",
+            None,
+        ),
+        (
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [],
+                "sort": None,
+                "offset": 1,
+            },
+            "in_place",
+            None,
+        ),
+        (
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [{"column": "Name", "op": "is_empty"}],
+                "sort": None,
+            },
+            "in_place",
+            None,
+        ),
+        (
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [{"column": "Name", "op": "is_empty"}],
+                "sort": None,
+            },
+            "snapshot",
+            None,
+        ),
+        (
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [
+                    {
+                        "op": "or",
+                        "clauses": [
+                            {"column": "Name", "op": "eq", "value": "a"},
+                            {"column": "Name", "op": "eq", "value": "b"},
+                        ],
+                    }
+                ],
+                "sort": None,
+            },
+            "in_place",
+            None,
+        ),
+        (
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [
+                    {
+                        "op": "or",
+                        "clauses": [
+                            {"column": "Name", "op": "eq", "value": "a"},
+                            {"column": "Name", "op": "eq", "value": "b"},
+                        ],
+                    }
+                ],
+                "sort": None,
+            },
+            "snapshot",
+            None,
+        ),
+    ]
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        for spec, mode, va in bad_specs:
+            raw = svc.apply_table_view(
+                book_path, spec, mode=mode, view_applicability=va
+            )
+            assert raw.startswith("Error:"), raw
+            lo.Range.AutoFilter.assert_not_called()
+            lo.AutoFilter.ShowAllData.assert_not_called()
+            lo.Sort.SortFields.Clear.assert_not_called()
+            lo.Sort.Apply.assert_not_called()
+
+        # view_applicability.viewable false
+        raw = svc.apply_table_view(
+            book_path,
+            {
+                "target": {"kind": "table", "name": "Items"},
+                "columns": ["Name"],
+                "where": [{"column": "Name", "op": "eq", "value": "a"}],
+                "sort": None,
+            },
+            view_applicability={
+                "viewable": False,
+                "reason": "limit truncates matching rows",
+            },
+        )
+        assert raw.startswith("Error:")
+        assert "limit" in raw.lower() or "viewable" in raw.lower()
+        lo.Range.AutoFilter.assert_not_called()
+
+
+def test_clear_table_view_com_showalldata_and_selective_unhide(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$B$1:$D$1",
+        column_names=["A", "B", "C"],
+        sheet_start_col=2,
+        filter_mode=True,
+        hidden_sheet_cols={4},  # already hidden by user (sheet col D)
+    )
+    # Pretend apply hid sheet col 3 (field B).
+    ws._col_state[3] = True
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    token = {
+        "v": 1,
+        "kind": "listobject",
+        "table": "Items",
+        "sheet": "software components",
+        "prior_filters": [],
+        "prior_sort": [],
+        "sort_applied": False,
+        "columns_hidden": [3],
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(svc.clear_table_view(book_path, token))
+
+    assert data["table"] == "Items"
+    lo.AutoFilter.ShowAllData.assert_called_once()
+    ws.AutoFilter.ShowAllData.assert_not_called()
+    # Unhid only column this call hid (3); user-hidden 4 stays hidden.
+    assert ws._col_state.get(3) is False
+    assert ws._col_state.get(4) is True
+
+
+def test_apply_table_view_com_sort_refusal_when_uncapturable(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$B$1",
+        column_names=["Name", "Qty"],
+        sheet_start_col=1,
+        sort_capturable=False,
+    )
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name", "Qty"],
+        "where": [{"column": "Name", "op": "eq", "value": "a"}],
+        "sort": {"column": "Qty", "order": "asc"},
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(svc.apply_table_view(book_path, view_spec))
+
+    assert data["restore_token"]["sort_applied"] is False
+    assert any("sort" in w.lower() for w in data.get("warnings", []))
+    lo.Sort.SortFields.Clear.assert_not_called()
+    lo.Sort.Apply.assert_not_called()
+    # Filter still applied.
+    assert lo.Range.AutoFilter.called
+
+
+def test_apply_table_view_com_sort_refusal_when_no_prior_sort(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$B$1",
+        column_names=["Name", "Qty"],
+        sheet_start_col=1,
+    )
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name", "Qty"],
+        "where": [{"column": "Name", "op": "eq", "value": "a"}],
+        "sort": {"by": [{"column": "Qty", "order": "asc"}]},
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(svc.apply_table_view(book_path, view_spec))
+
+    assert data["restore_token"]["sort_applied"] is False
+    assert data["restore_token"]["prior_sort"] == []
+    assert any("sort" in w.lower() for w in data.get("warnings", []))
+    lo.Sort.SortFields.Clear.assert_not_called()
+    lo.Sort.Apply.assert_not_called()
+    assert lo.Range.AutoFilter.called
+
+
+def test_apply_and_clear_table_view_com_sort_restore(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$B$1",
+        column_names=["Name", "Qty"],
+        sheet_start_col=1,
+        sort_fields=[("Name", "desc")],
+    )
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name", "Qty"],
+        "where": [],
+        "sort": {"by": [{"column": "Qty", "order": "asc"}]},
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        applied = json.loads(svc.apply_table_view(book_path, view_spec))
+        token = applied["restore_token"]
+        assert token["sort_applied"] is True
+        assert token["prior_sort"] == [{"column": "Name", "order": "desc"}]
+        lo._recorded_sort.clear()
+        json.loads(svc.clear_table_view(book_path, token))
+
+    # Clear restored prior sort (Name desc).
+    assert lo.Sort.SortFields.Clear.called
+    assert any(
+        c.get("Order") == 2 for c in lo._recorded_sort
+    )  # xlDescending restored
+
+
+def _view_plain_range_mock(
+    *,
+    sheet_name: str,
+    range_a1: str,
+    column_names: list[str],
+    sheet_start_col: int = 1,
+    prior_autofilter_mode: bool = False,
+    filter_mode: bool = False,
+    hidden_sheet_cols: set[int] | None = None,
+    sort_capturable: bool = True,
+    sort_fields: list[tuple[str, str]] | None = None,
+) -> tuple[MagicMock, MagicMock]:
+    """Worksheet + Range mocks for plain-region apply/clear view tests."""
+    hidden_sheet_cols = set(hidden_sheet_cols or ())
+    min_col = sheet_start_col
+    # Header + one data row so Value2 looks like a real region.
+    header = list(column_names)
+    data = [f"v{i}" for i in range(len(column_names))]
+    matrix = [header, data]
+
+    rng = MagicMock()
+    rng.Value2 = matrix
+    recorded_af: list = []
+
+    def _af(**kwargs):
+        recorded_af.append(kwargs)
+        ws.AutoFilterMode = True
+        ws.FilterMode = True
+        return True
+
+    rng.AutoFilter = MagicMock(side_effect=_af)
+
+    def _rng_columns(field: int):
+        col = MagicMock()
+        col.Column = min_col + int(field) - 1
+        return col
+
+    rng.Columns = MagicMock(side_effect=_rng_columns)
+
+    ws = MagicMock()
+    ws.Name = sheet_name
+    ws.AutoFilterMode = prior_autofilter_mode
+    ws.FilterMode = filter_mode
+    ws.ListObjects.Count = 0
+    ws.ListObjects.Item = MagicMock(
+        side_effect=AssertionError("must not touch ListObjects")
+    )
+    ws.ListObjects.Add = MagicMock(
+        side_effect=AssertionError("must not call ListObjects.Add")
+    )
+    ws.Copy = MagicMock(side_effect=AssertionError("must not call Worksheet.Copy"))
+
+    af = MagicMock()
+    af.FilterMode = filter_mode
+    af.ShowAllData = MagicMock()
+    filters = MagicMock()
+    filters.Count = 0
+    filters.Item = MagicMock(side_effect=lambda i: MagicMock(On=False))
+    af.Filters = filters
+    ws.AutoFilter = af
+    ws.ShowAllData = MagicMock()
+
+    sort_obj = MagicMock()
+    sort_fields_coll = MagicMock()
+    recorded_sort: list = []
+
+    if sort_fields and sort_capturable:
+        sort_fields_coll.Count = len(sort_fields)
+
+        def _sf_item(i: int):
+            col_name, order = sort_fields[i - 1]
+            field_idx = column_names.index(col_name) + 1
+            sf = MagicMock()
+            sf.CustomOrder = None
+            sf.SortOn = 0
+            sf.Key.Column = min_col + field_idx - 1
+            sf.Order = 2 if order == "desc" else 1
+            return sf
+
+        sort_fields_coll.Item = MagicMock(side_effect=_sf_item)
+    elif not sort_capturable:
+        sort_fields_coll.Count = 1
+        sf = MagicMock()
+        sf.CustomOrder = "CustomList"
+        sf.SortOn = 0
+        sf.Key.Column = min_col
+        sf.Order = 1
+        sort_fields_coll.Item = MagicMock(return_value=sf)
+    else:
+        sort_fields_coll.Count = 0
+
+    def _sort_add(**kwargs):
+        recorded_sort.append(kwargs)
+        return MagicMock()
+
+    sort_fields_coll.Clear = MagicMock()
+    sort_fields_coll.Add = MagicMock(side_effect=_sort_add)
+    sort_obj.SortFields = sort_fields_coll
+    sort_obj.SetRange = MagicMock()
+    sort_obj.Apply = MagicMock()
+    sort_obj.Header = None
+    ws.Sort = sort_obj
+    ws._recorded_sort = recorded_sort  # type: ignore[attr-defined]
+    ws._recorded_af = recorded_af  # type: ignore[attr-defined]
+
+    col_state: dict[int, bool] = {c: True for c in hidden_sheet_cols}
+
+    def _columns(sheet_col: int):
+        col = MagicMock()
+
+        class _Entire:
+            @property
+            def Hidden(self):
+                return col_state.get(int(sheet_col), False)
+
+            @Hidden.setter
+            def Hidden(self, value):
+                col_state[int(sheet_col)] = bool(value)
+
+        col.EntireColumn = _Entire()
+        return col
+
+    ws.Columns = MagicMock(side_effect=_columns)
+    ws._col_state = col_state  # type: ignore[attr-defined]
+    ws.Range = MagicMock(return_value=rng)
+    return ws, rng
+
+
+def test_apply_table_view_com_region_autofilter_no_listobjects_add(book_path):
+    ws, rng = _view_plain_range_mock(
+        sheet_name="stackfleet concept",
+        range_a1="B4:D6",
+        column_names=["Name", "Qty", "Tag"],
+        sheet_start_col=2,
+        prior_autofilter_mode=False,
+    )
+    wb = _workbook_mock(book_path, {"stackfleet concept": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {
+            "kind": "region",
+            "sheet": "stackfleet concept",
+            "range": "B4:D6",
+        },
+        "columns": ["Name", "Qty"],
+        "where": [{"column": "Tag", "op": "eq", "value": "x"}],
+        "sort": None,
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(svc.apply_table_view(book_path, view_spec, mode="in_place"))
+
+    token = data["restore_token"]
+    assert token["kind"] == "range"
+    assert token["range"] == "B4:D6"
+    assert token["sheet"] == "stackfleet concept"
+    assert token["prior_autofilter_mode"] is False
+    assert token["columns_hidden"] == [4]  # Tag at sheet col 4
+    assert ws.AutoFilterMode is True
+    assert ws.FilterMode is True
+    assert rng.AutoFilter.called
+    applied_fields = [(c or {}).get("Field") for c in ws._recorded_af if c]
+    assert 3 in applied_fields  # Tag is field 3 in B:D
+    ws.ListObjects.Add.assert_not_called()
+    ws.Copy.assert_not_called()
+
+
+def test_clear_table_view_com_region_restores_autofilter_mode(book_path):
+    ws, rng = _view_plain_range_mock(
+        sheet_name="stackfleet concept",
+        range_a1="A1:C3",
+        column_names=["Name", "Qty", "Tag"],
+        sheet_start_col=1,
+        prior_autofilter_mode=False,
+        filter_mode=True,
+        hidden_sheet_cols={3},  # user-hidden Tag
+    )
+    # Pretend apply hid Qty (col 2).
+    ws._col_state[2] = True
+    ws.AutoFilterMode = True
+    ws.FilterMode = True
+    wb = _workbook_mock(book_path, {"stackfleet concept": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    token = {
+        "v": 1,
+        "kind": "range",
+        "sheet": "stackfleet concept",
+        "range": "A1:C3",
+        "prior_autofilter_mode": False,
+        "prior_filters": [],
+        "prior_sort": None,
+        "sort_applied": False,
+        "columns_hidden": [2],
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(svc.clear_table_view(book_path, token))
+
+    assert data["range"] == "A1:C3"
+    assert ws.AutoFilterMode is False
+    # Unhid only column this call hid; user-hidden 3 stays hidden.
+    assert ws._col_state.get(2) is False
+    assert ws._col_state.get(3) is True
+    ws.ListObjects.Add.assert_not_called()
+
+
+def test_apply_and_clear_table_view_com_region_no_table_created(book_path):
+    ws, rng = _view_plain_range_mock(
+        sheet_name="plain",
+        range_a1="A1:B3",
+        column_names=["Name", "Qty"],
+        sheet_start_col=1,
+        prior_autofilter_mode=True,
+        filter_mode=False,
+    )
+    wb = _workbook_mock(book_path, {"plain": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "region", "sheet": "plain", "range": "A1:B3"},
+        "columns": ["Name", "Qty"],
+        "where": [{"column": "Name", "op": "eq", "value": "a"}],
+        "sort": None,
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        applied = json.loads(svc.apply_table_view(book_path, view_spec))
+        token = applied["restore_token"]
+        assert token["prior_autofilter_mode"] is True
+        assert ws.ListObjects.Count == 0
+        json.loads(svc.clear_table_view(book_path, token))
+
+    # Prior AutoFilterMode was True → arrows restored (not forced off).
+    assert ws.AutoFilterMode is True
+    ws.ListObjects.Add.assert_not_called()
+    ws.Copy.assert_not_called()
+
+
+def _attach_list_column_bodies(
+    lo: MagicMock, column_data: dict[str, list]
+) -> None:
+    """Add per-column DataBodyRange.Value2 onto an existing ListColumns mock."""
+    column_names = list(column_data.keys())
+    original_item = lo.ListColumns.Item
+
+    def _col_item(key):
+        col = original_item(key)
+        if isinstance(key, int):
+            col_name = column_names[key - 1]
+        else:
+            col_name = str(key)
+        values = column_data[col_name]
+
+        class _Body:
+            @property
+            def Value2(self):
+                if not values:
+                    return None
+                if len(values) == 1:
+                    return values[0]
+                return tuple((v,) for v in values)
+
+        col.DataBodyRange = _Body()
+        return col
+
+    lo.ListColumns.Item = MagicMock(side_effect=_col_item)
+
+
+class _SnapshotSheets:
+    """Minimal Worksheets collection: Count/Item/Add/call-by-name/Delete."""
+
+    def __init__(self, source_ws: MagicMock):
+        self._sheets: list[Any] = [source_ws]
+        self._by_name = {str(source_ws.Name): source_ws}
+        self.added: list[Any] = []
+        self.deleted: list[str] = []
+        self.fail_next_rename = False
+
+    @property
+    def Count(self) -> int:
+        return len(self._sheets)
+
+    def Item(self, index: int) -> Any:
+        return self._sheets[index - 1]
+
+    def __call__(self, name: str) -> Any:
+        key = str(name)
+        if key not in self._by_name:
+            raise RuntimeError(f"Sheet '{name}' not found")
+        return self._by_name[key]
+
+    def _rename(self, sheet: Any, old: str, new: str) -> None:
+        if old in self._by_name and self._by_name[old] is sheet:
+            del self._by_name[old]
+        self._by_name[new] = sheet
+
+    def Add(self) -> Any:
+        store: dict = {}
+        coll = self
+
+        class _ValueRange:
+            def Resize(self, nrows, ncols):
+                return self
+
+            @property
+            def Value(self):
+                return store.get("v")
+
+            @Value.setter
+            def Value(self, v):
+                store["v"] = v
+
+        class _NewSheet:
+            def __init__(self) -> None:
+                self._name = f"Sheet{len(coll._sheets) + 1}"
+                self._value_store = store
+                self.Range = lambda _addr: _ValueRange()
+                self.ListObjects = MagicMock()
+                self.ListObjects.Count = 0
+                self.ListObjects.Add = MagicMock(
+                    side_effect=AssertionError(
+                        "must not call ListObjects.Add on snapshot"
+                    )
+                )
+                self.Copy = MagicMock(
+                    side_effect=AssertionError("must not call Worksheet.Copy")
+                )
+                self.Delete = MagicMock(side_effect=self._delete)
+
+            @property
+            def Name(self) -> str:
+                return self._name
+
+            @Name.setter
+            def Name(self, value: str) -> None:
+                if coll.fail_next_rename:
+                    coll.fail_next_rename = False
+                    raise RuntimeError("rename failed")
+                new = str(value)
+                coll._rename(self, self._name, new)
+                self._name = new
+
+            def _delete(self) -> None:
+                coll.deleted.append(self._name)
+                coll._sheets = [s for s in coll._sheets if s is not self]
+                coll._by_name.pop(self._name, None)
+
+        new_ws = _NewSheet()
+        self._sheets.append(new_ws)
+        self._by_name[new_ws.Name] = new_ws
+        self.added.append(new_ws)
+        return new_ws
+
+
+def test_apply_table_view_com_snapshot_writes_values_honors_limit_offset(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$C$1",
+        column_names=["Name", "Qty", "Tag"],
+        sheet_start_col=1,
+        filter_mode=True,
+        hidden_sheet_cols={3},
+    )
+    _attach_list_column_bodies(
+        lo,
+        {
+            "Name": ["a", "b", "c", "d"],
+            "Qty": [4, 1, 3, 2],
+            "Tag": ["x", "y", "x", "x"],
+        },
+    )
+    ws.Name = "software components"
+    ws.FilterMode = True
+    prior_hidden = dict(ws._col_state)
+
+    sheets = _SnapshotSheets(ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name", "Qty"],
+        "where": [{"column": "Tag", "op": "eq", "value": "x"}],
+        "sort": {"by": [{"column": "Qty", "order": "asc"}]},
+        "limit": 2,
+        "offset": 1,
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(
+            svc.apply_table_view(
+                book_path,
+                view_spec,
+                mode="snapshot",
+                view_applicability={
+                    "viewable": False,
+                    "reason": "limit truncates matching rows",
+                },
+            )
+        )
+
+    assert data["mode"] == "snapshot"
+    assert data["sheet"] == "mcp_view"
+    token = data["restore_token"]
+    assert token == {
+        "v": 1,
+        "kind": "snapshot",
+        "sheet": "mcp_view",
+        "created_by_tool": True,
+    }
+    assert len(sheets.added) == 1
+    written = sheets.added[0]._value_store["v"]
+    # Matching Tag=x sorted by Qty asc: (d,2), (c,3), (a,4) → offset 1 limit 2 → c,a
+    assert written == (("Name", "Qty"), ("c", 3), ("a", 4))
+
+    lo.Range.AutoFilter.assert_not_called()
+    lo.AutoFilter.ShowAllData.assert_not_called()
+    lo.Sort.Apply.assert_not_called()
+    ws.Copy.assert_not_called()
+    ws.ListObjects.Add.assert_not_called()
+    assert ws.FilterMode is True
+    assert dict(ws._col_state) == prior_hidden
+    sheets.added[0].ListObjects.Add.assert_not_called()
+    sheets.added[0].Copy.assert_not_called()
+
+
+def test_apply_table_view_com_snapshot_unique_name_and_clear_deletes_sheet(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$A$1",
+        column_names=["Name"],
+        sheet_start_col=1,
+    )
+    _attach_list_column_bodies(lo, {"Name": ["a", "b"]})
+    ws.Name = "Sheet1"
+    ws.FilterMode = False
+
+    sheets = _SnapshotSheets(ws)
+    # Seed a colliding name with no ListObjects so find still hits Items.
+    seed = MagicMock()
+    seed.Name = "mcp_view"
+    seed.ListObjects = MagicMock()
+    seed.ListObjects.Count = 0
+    sheets._sheets.insert(0, seed)
+    sheets._by_name["mcp_view"] = seed
+
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name"],
+        "where": [],
+        "sort": None,
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        first = json.loads(
+            svc.apply_table_view(book_path, view_spec, mode="snapshot")
+        )
+        assert first["sheet"] == "mcp_view_2"
+        second = json.loads(
+            svc.apply_table_view(book_path, view_spec, mode="snapshot")
+        )
+        assert second["sheet"] == "mcp_view_3"
+        clear = json.loads(
+            svc.clear_table_view(book_path, first["restore_token"])
+        )
+
+    assert clear["sheet"] == "mcp_view_2"
+    assert "mcp_view_2" in sheets.deleted
+    assert "mcp_view_3" not in sheets.deleted
+    assert "mcp_view" not in sheets.deleted
+    assert "Sheet1" not in sheets.deleted
+    assert ws.FilterMode is False
+    lo.Range.AutoFilter.assert_not_called()
+    ws.Copy.assert_not_called()
+
+
+def test_apply_table_view_com_snapshot_deletes_sheet_when_rename_fails(book_path):
+    lo, ws = _view_list_object_mock(
+        name="Items",
+        header_addr="$A$1:$A$1",
+        column_names=["Name"],
+        sheet_start_col=1,
+    )
+    _attach_list_column_bodies(lo, {"Name": ["a"]})
+    ws.Name = "Sheet1"
+    sheets = _SnapshotSheets(ws)
+    sheets.fail_next_rename = True
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+    view_spec = {
+        "target": {"kind": "table", "name": "Items"},
+        "columns": ["Name"],
+        "where": [],
+        "sort": None,
+    }
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.apply_table_view(book_path, view_spec, mode="snapshot")
+
+    assert raw.startswith("Error:")
+    assert sheets.deleted
+    assert ws.Name == "Sheet1"
+    lo.Range.AutoFilter.assert_not_called()
+

@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-14
 title: Excel view from a query spec
-status: draft
+status: done
 depends_on:
   - EPIC-13
 traces_to:
@@ -57,3 +57,29 @@ In-place changes are visible to everyone in the desktop workbook. Excel COM does
 1. **14-1** after **13-2**, so the view spec already exists.
 2. **14-2** after **13-3** and **14-1**.
 3. **14-3** after **14-1**. It can proceed in parallel with **14-2**.
+
+## Execution log
+
+### Start — 2026-09-23
+
+**Outcome:** partial
+
+**Progress** — Claimed EPIC-14 on branch `feat/epic-14-excel-view-from-query-spec`. Sequence is 14-1, then 14-2, then 14-3. Epic-13 is already on `main`.
+
+**Evidence** — branch `feat/epic-14-excel-view-from-query-spec` from `main` (`e6aad2e`).
+
+**Next steps** — Implement STORY-14-1, then 14-2 and 14-3.
+
+**Blockers** — none
+
+### Close — 2026-09-23
+
+**Outcome:** completed
+
+**Progress** — STORY-14-1, STORY-14-2, and STORY-14-3 are done. `apply_table_view` and `clear_table_view` are COM-only WRITE tools. In-place ListObject uses AutoFilter, optional restorable sort, and column focus. In-place plain ranges use `Range.AutoFilter` and do not create a table. Snapshot writes values to a new sheet and leaves the source alone. File transport returns a COM-required error. Review fixes: no in-place sort unless a prior sort can be reapplied; snapshot refuses a paged query that omits limit/offset; a failed snapshot sheet is deleted.
+
+**Evidence** — branch `feat/epic-14-excel-view-from-query-spec`. `python -m pytest -q` → 373 passed, 1 skipped. Pull request: https://github.com/benvdbergh/excel-mcp-server/pull/9
+
+**Next steps** — pull request for review.
+
+**Blockers** — none

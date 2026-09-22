@@ -86,6 +86,14 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
         ToolKind.READ,
         notes="Filter a non-table region; returns view_spec (Epic 13 / STORY-13-3).",
     ),
+    "apply_table_view": ToolInventoryEntry(
+        ToolKind.WRITE,
+        notes="COM-only: apply ListObject in-place view from view_spec (Epic 14 / STORY-14-1).",
+    ),
+    "clear_table_view": ToolInventoryEntry(
+        ToolKind.WRITE,
+        notes="COM-only: restore prior ListObject filter/sort/columns (Epic 14 / STORY-14-1).",
+    ),
     "merge_cells": ToolInventoryEntry(ToolKind.WRITE),
     "unmerge_cells": ToolInventoryEntry(ToolKind.WRITE),
     "get_merged_cells": ToolInventoryEntry(ToolKind.READ),

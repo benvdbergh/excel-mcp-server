@@ -256,6 +256,26 @@ class _AllRoutedOpsDummy:
     ) -> str:
         return ""
 
+    def apply_table_view(
+        self,
+        filepath: str,
+        view_spec: dict[str, Any],
+        mode: str = "in_place",
+        view_applicability: Optional[dict[str, Any]] = None,
+        *,
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
+    def clear_table_view(
+        self,
+        filepath: str,
+        restore_token: dict[str, Any],
+        *,
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
     def copy_worksheet(
         self,
         filepath: str,

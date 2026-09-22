@@ -549,6 +549,36 @@ class FileWorkbookService:
             logger.error(f"Error creating table: {e}")
             raise
 
+    def apply_table_view(
+        self,
+        filepath: str,
+        view_spec: dict[str, Any],
+        mode: str = "in_place",
+        view_applicability: Optional[dict[str, Any]] = None,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del filepath, view_spec, mode, view_applicability, operation_metadata
+        return (
+            "Error: apply_table_view requires COM (Excel desktop view). "
+            "File transport cannot mutate AutoFilter/Sort/hidden columns; "
+            "open the workbook in Excel and use workbook_transport=com or auto."
+        )
+
+    def clear_table_view(
+        self,
+        filepath: str,
+        restore_token: dict[str, Any],
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del filepath, restore_token, operation_metadata
+        return (
+            "Error: clear_table_view requires COM (Excel desktop view). "
+            "File transport cannot restore AutoFilter/Sort/hidden columns; "
+            "open the workbook in Excel and use workbook_transport=com or auto."
+        )
+
     def copy_worksheet(
         self,
         filepath: str,
