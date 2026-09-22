@@ -70,6 +70,22 @@ _RAW_INVENTORY: dict[str, ToolInventoryEntry] = {
     "delete_worksheet": ToolInventoryEntry(ToolKind.WRITE),
     "rename_worksheet": ToolInventoryEntry(ToolKind.WRITE),
     "get_workbook_metadata": ToolInventoryEntry(ToolKind.READ),
+    "list_tables": ToolInventoryEntry(
+        ToolKind.READ,
+        notes="Workbook ListObject catalog; no cell values (Epic 13 / STORY-13-1).",
+    ),
+    "query_table": ToolInventoryEntry(
+        ToolKind.READ,
+        notes="Filter ListObject rows; returns view_spec (Epic 13 / STORY-13-2).",
+    ),
+    "map_sheet_layout": ToolInventoryEntry(
+        ToolKind.READ,
+        notes="Sheet tables + non-table islands (Epic 13 / STORY-13-3).",
+    ),
+    "query_region": ToolInventoryEntry(
+        ToolKind.READ,
+        notes="Filter a non-table region; returns view_spec (Epic 13 / STORY-13-3).",
+    ),
     "merge_cells": ToolInventoryEntry(ToolKind.WRITE),
     "unmerge_cells": ToolInventoryEntry(ToolKind.WRITE),
     "get_merged_cells": ToolInventoryEntry(ToolKind.READ),

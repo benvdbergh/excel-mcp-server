@@ -73,6 +73,56 @@ class WorkbookReadOperations(Protocol):
         """Workbook structure / info (MCP: ``get_workbook_metadata``)."""
         ...
 
+    def list_tables(
+        self,
+        filepath: str,
+        detail: str = "schema",
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Catalog native Excel ListObjects (MCP: ``list_tables``). No cell values."""
+        ...
+
+    def query_table(
+        self,
+        filepath: str,
+        table: str,
+        columns: Optional[list[str]] = None,
+        where: Optional[list[dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Filter ListObject rows by column and where clauses (MCP: ``query_table``)."""
+        ...
+
+    def map_sheet_layout(
+        self,
+        filepath: str,
+        sheet_name: str,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """List ListObjects and non-table islands on a sheet (MCP: ``map_sheet_layout``)."""
+        ...
+
+    def query_region(
+        self,
+        filepath: str,
+        sheet_name: str,
+        region_id: Optional[str] = None,
+        range: Optional[str] = None,
+        columns: Optional[list[str]] = None,
+        where: Optional[list[dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Filter a non-table region by id or A1 range (MCP: ``query_region``)."""
+        ...
+
     def read_merged_cell_ranges(
         self,
         filepath: str,
@@ -413,6 +463,10 @@ ROUTED_WORKBOOK_OPERATION_NAMES: tuple[str, ...] = (
     "read_range_with_metadata",
     "export_worksheet_table",
     "workbook_metadata",
+    "list_tables",
+    "query_table",
+    "map_sheet_layout",
+    "query_region",
     "read_merged_cell_ranges",
     "read_worksheet_data_validation",
     "validate_sheet_range",

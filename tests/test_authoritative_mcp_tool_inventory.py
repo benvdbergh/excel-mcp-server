@@ -36,6 +36,10 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "delete_worksheet",
         "rename_worksheet",
         "get_workbook_metadata",
+        "list_tables",
+        "query_table",
+        "map_sheet_layout",
+        "query_region",
         "merge_cells",
         "unmerge_cells",
         "get_merged_cells",
@@ -85,8 +89,8 @@ def test_inventory_matches_server_mcp_tool_decorators() -> None:
     assert _mcp_tool_names_from_server() == frozenset(MCP_TOOL_INVENTORY)
 
 
-def test_inventory_has_exactly_31_keys() -> None:
-    assert len(MCP_TOOL_INVENTORY) == 31
+def test_inventory_has_exactly_35_keys() -> None:
+    assert len(MCP_TOOL_INVENTORY) == 35
 
 
 def test_every_key_matches_expected_set_or_pattern() -> None:
@@ -115,6 +119,10 @@ def test_chart_and_pivot_are_v1_file_forced() -> None:
 def test_at_least_one_read_tool_is_read() -> None:
     assert get_tool_kind("read_data_from_excel") is ToolKind.READ
     assert get_tool_kind("export_worksheet_table") is ToolKind.READ
+    assert get_tool_kind("list_tables") is ToolKind.READ
+    assert get_tool_kind("query_table") is ToolKind.READ
+    assert get_tool_kind("map_sheet_layout") is ToolKind.READ
+    assert get_tool_kind("query_region") is ToolKind.READ
 
 
 def test_lifecycle_tools_are_session() -> None:

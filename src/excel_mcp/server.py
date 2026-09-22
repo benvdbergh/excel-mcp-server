@@ -1060,6 +1060,224 @@ def get_workbook_metadata(
 
 @mcp.tool(
     annotations=ToolAnnotations(
+        title="List Tables",
+        readOnlyHint=True,
+    ),
+)
+def list_tables(
+    filepath: str,
+    detail: str = "schema",
+    workbook_transport: Optional[str] = None,
+) -> str:
+    """List native Excel tables (ListObjects) in a workbook.
+
+    Returns JSON ``{\"tables\": [...]}`` with sheet, name, range, header_range,
+    data_range, row_count, and filter_applied. ``detail=schema`` (default) includes
+    column names; ``detail=minimal`` omits them. No cell values. Does not change
+    filters, sort order, or hidden columns.
+    """
+    try:
+        return _workbook_dispatch(
+            "list_tables",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.list_tables(fp, detail=detail),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.list_tables(fp, detail=detail)
+            ),
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error listing tables: {e}")
+        raise
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Query Table",
+        readOnlyHint=True,
+    ),
+)
+def query_table(
+    filepath: str,
+    table: str,
+    columns: Optional[list[str]] = None,
+    where: Optional[list[dict]] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str:
+    """Query rows from a native Excel table (ListObject) by column and filter.
+
+    Args:
+        filepath: Workbook path or cloud locator (see TOOLS.md filepath section).
+        table: ListObject name (unique in the workbook).
+        columns: Projected column names. Required when the table has more than 32
+            columns; otherwise defaults to all columns.
+        where: AND-combined clauses ``{column, op, value}``. Operators: eq, neq,
+            contains, in, gt, gte, lt, lte, is_empty. Empty list returns all data
+            rows (subject to limit/offset).
+        limit: Max rows to return (default 100). Marked not viewable.
+        offset: Rows to skip from matching set (default 0). Marked not viewable.
+        workbook_transport: Optional ``auto`` | ``file`` | ``com``.
+        include_routing_metadata: When true, wrap JSON in ADR 0010 envelope.
+
+    Returns:
+        JSON with ``headers``, row objects, ``row_count``, ``truncated``,
+        ``view_spec``, and ``view_applicability``. Does not change filters, sort,
+        or hidden columns. Never calls AutoFilter/Sort.
+    """
+    try:
+        return _workbook_dispatch(
+            "query_table",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.query_table(
+                fp,
+                table,
+                columns=columns,
+                where=where,
+                limit=limit,
+                offset=offset,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.query_table(
+                    fp,
+                    table,
+                    columns=columns,
+                    where=where,
+                    limit=limit,
+                    offset=offset,
+                )
+            ),
+            include_routing_metadata=include_routing_metadata,
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error querying table: {e}")
+        raise
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Map Sheet Layout",
+        readOnlyHint=True,
+    ),
+)
+def map_sheet_layout(
+    filepath: str,
+    sheet_name: str,
+    workbook_transport: Optional[str] = None,
+) -> str:
+    """Map native Excel tables and non-table occupied islands on one sheet.
+
+    Returns JSON ``{\"tables\": [...], \"regions\": [...]}``. Tables reuse the
+    ``list_tables`` fields plus ``kind: \"table\"``. Regions include ``id``,
+    bounds, and a header guess. Does not create ListObjects or change filters,
+    sort, or hidden columns.
+    """
+    try:
+        return _workbook_dispatch(
+            "map_sheet_layout",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.map_sheet_layout(fp, sheet_name),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.map_sheet_layout(fp, sheet_name)
+            ),
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error mapping sheet layout: {e}")
+        raise
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Query Region",
+        readOnlyHint=True,
+    ),
+)
+def query_region(
+    filepath: str,
+    sheet_name: str,
+    region_id: Optional[str] = None,
+    range: Optional[str] = None,
+    columns: Optional[list[str]] = None,
+    where: Optional[list[dict]] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str:
+    """Query rows from a non-table rectangular region by id or explicit A1 range.
+
+    Args:
+        filepath: Workbook path or cloud locator (see TOOLS.md filepath section).
+        sheet_name: Worksheet name.
+        region_id: Stable id from ``map_sheet_layout`` (``sheet!A1:D10``). Exactly
+            one of ``region_id`` or ``range`` is required.
+        range: Explicit A1 range whose first row is the header.
+        columns: Projected column names. Required when the region has more than 32
+            columns; otherwise defaults to all columns.
+        where: AND-combined clauses ``{column, op, value}``. Same operators as
+            ``query_table``.
+        limit: Max rows to return (default 100). Marked not viewable.
+        offset: Rows to skip from matching set (default 0). Marked not viewable.
+        workbook_transport: Optional ``auto`` | ``file`` | ``com``.
+        include_routing_metadata: When true, wrap JSON in ADR 0010 envelope.
+
+    Returns:
+        JSON with ``headers``, row objects, ``row_count``, ``truncated``,
+        ``view_spec`` (target kind ``region``), and ``view_applicability``. Does
+        not create a ListObject or change filters, sort, or hidden columns.
+    """
+    try:
+        return _workbook_dispatch(
+            "query_region",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.query_region(
+                fp,
+                sheet_name,
+                region_id=region_id,
+                range=range,
+                columns=columns,
+                where=where,
+                limit=limit,
+                offset=offset,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.query_region(
+                    fp,
+                    sheet_name,
+                    region_id=region_id,
+                    range=range,
+                    columns=columns,
+                    where=where,
+                    limit=limit,
+                    offset=offset,
+                )
+            ),
+            include_routing_metadata=include_routing_metadata,
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error querying region: {e}")
+        raise
+
+@mcp.tool(
+    annotations=ToolAnnotations(
         title="Merge Cells",
         destructiveHint=True,
     ),
