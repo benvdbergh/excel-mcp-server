@@ -78,7 +78,7 @@ In-place changes are visible to everyone in the desktop workbook. Excel COM does
 
 **Progress** — STORY-14-1, STORY-14-2, and STORY-14-3 are done. `apply_table_view` and `clear_table_view` are COM-only WRITE tools. In-place ListObject uses AutoFilter, optional restorable sort, and column focus. In-place plain ranges use `Range.AutoFilter` and do not create a table. Snapshot writes values to a new sheet and leaves the source alone. File transport returns a COM-required error. Review fixes: no in-place sort unless a prior sort can be reapplied; snapshot refuses a paged query that omits limit/offset; a failed snapshot sheet is deleted.
 
-**Evidence** — branch `feat/epic-14-excel-view-from-query-spec`. `python -m pytest -q` → 373 passed, 1 skipped.
+**Evidence** — branch `feat/epic-14-excel-view-from-query-spec`. `python -m pytest -q` → 373 passed, 1 skipped. Pull request: https://github.com/benvdbergh/excel-mcp-server/pull/9
 
 **Next steps** — pull request for review.
 
