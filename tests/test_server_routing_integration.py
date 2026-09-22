@@ -145,6 +145,89 @@ def test_export_worksheet_table_file_routing(tmp_path: Path) -> None:
     assert data["row_count"] == 1
 
 
+def test_query_table_routing_envelope(tmp_path: Path) -> None:
+    from openpyxl.worksheet.table import Table
+
+    p = tmp_path / "route_query.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet"
+    ws.append(["Name", "Qty"])
+    ws.append(["a", 1])
+    ws.append(["b", 2])
+    ws.add_table(Table(displayName="Items", ref="A1:B3"))
+    wb.save(p)
+    path = str(p.resolve())
+
+    from excel_mcp import server as srv
+
+    legacy = json.loads(
+        srv.query_table(
+            path,
+            "Items",
+            columns=["Name"],
+            workbook_transport="file",
+            include_routing_metadata=False,
+        )
+    )
+    assert "result" not in legacy
+    assert legacy["headers"] == ["Name"]
+
+    envelope = json.loads(
+        srv.query_table(
+            path,
+            "Items",
+            columns=["Name"],
+            workbook_transport="file",
+            include_routing_metadata=True,
+        )
+    )
+    assert envelope["_meta"]["workbook_backend"] == "file"
+    assert envelope["result"]["headers"] == ["Name"]
+    assert envelope["result"]["row_count"] == 2
+    assert isinstance(envelope["warnings"], list)
+
+
+def test_query_region_routing_envelope(tmp_path: Path) -> None:
+    p = tmp_path / "route_region.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet"
+    ws["A2"] = "Name"
+    ws["B2"] = "Qty"
+    ws["A3"] = "a"
+    ws["B3"] = 1
+    wb.save(p)
+    path = str(p.resolve())
+
+    from excel_mcp import server as srv
+
+    legacy = json.loads(
+        srv.query_region(
+            path,
+            "Sheet",
+            range="A2:B3",
+            workbook_transport="file",
+            include_routing_metadata=False,
+        )
+    )
+    assert "result" not in legacy
+    assert legacy["headers"] == ["Name", "Qty"]
+    assert legacy["view_spec"]["target"]["kind"] == "region"
+
+    envelope = json.loads(
+        srv.query_region(
+            path,
+            "Sheet",
+            range="A2:B3",
+            workbook_transport="file",
+            include_routing_metadata=True,
+        )
+    )
+    assert envelope["_meta"]["workbook_backend"] == "file"
+    assert envelope["result"]["row_count"] == 1
+
+
 def test_write_path_file_backend(tmp_path: Path) -> None:
     p = tmp_path / "route_write.xlsx"
     Workbook().save(p)

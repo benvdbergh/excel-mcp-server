@@ -442,6 +442,141 @@ create_pivot_table(
 
 ## Table Operations
 
+### list_tables
+
+**Kind:** READ
+
+List every native Excel table (`ListObject`) in a workbook. Returns catalog
+metadata only (no cell values). Does not change filters, sort order, or hidden
+columns.
+
+```python
+list_tables(
+    filepath: str,
+    detail: str = "schema",
+    workbook_transport: Optional[str] = None,
+) -> str
+```
+
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top of this file)
+- `detail`: `schema` (default) includes column names; `minimal` omits them
+- `workbook_transport`: Optional transport override (`auto` | `file` | `com`)
+- Returns: JSON string `{"tables": [...]}` with `sheet`, `name`, `range`,
+  `header_range`, `data_range`, `row_count`, `filter_applied`, and optionally
+  `columns`. Empty workbook → `{"tables": []}`.
+
+### query_table
+
+**Kind:** READ
+
+Filter rows from a native Excel table (`ListObject`) by column projection and
+AND-combined `where` clauses. Returns row objects plus a `view_spec` Epic-14 can
+apply later. Does **not** change filters, sort order, or hidden columns (never
+calls AutoFilter, Sort, ShowAllData, or hide/unhide). File mode does not save.
+
+```python
+query_table(
+    filepath: str,
+    table: str,
+    columns: Optional[list[str]] = None,
+    where: Optional[list[dict]] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str
+```
+
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top of this file)
+- `table`: ListObject name (unique in the workbook; resolve by name, not sheet+range)
+- `columns`: Column names to return. **Required when the table has more than 32
+  columns**; at or under 32, omitting `columns` returns all columns. Prefer an
+  explicit short list on wide tables (for example a 120-column component register).
+- `where`: List of `{column, op, value}` clauses combined with AND. Operators:
+  `eq`, `neq`, `contains` (case-insensitive substring), `in` (list value; OR
+  within one column), `gt`, `gte`, `lt`, `lte`, `is_empty` (no `value`). Empty
+  `where` returns all data rows (subject to limit/offset). Header row is never
+  a data row. Comparisons coerce to numbers when both sides parse as numbers.
+- `limit`: Max rows in this page (default **100**). Always marked not viewable.
+- `offset`: Matching rows to skip (default **0**). Always marked not viewable.
+- `workbook_transport`: Optional transport override (`auto` | `file` | `com`)
+- `include_routing_metadata`: When `true`, wrap the payload in the ADR 0010
+  envelope (`result` / `_meta` / `warnings`); default `false` keeps legacy JSON.
+- Returns: JSON with `headers`, `rows` (objects keyed by header), `row_count`
+  (rows in this page), `truncated` (true when more matches exist beyond
+  offset+limit), `view_spec`, and `view_applicability`. No per-cell addresses.
+  `view_applicability.limit_viewable` and `offset_viewable` are always `false`.
+  `in` on one column is viewable; `is_empty`, and a partial page from limit/offset,
+  are not. `view_spec.where` keeps every requested clause, including ones Excel
+  cannot show. When `view_applicability.viewable` is false, a later view must
+  refuse the spec rather than apply the viewable subset (that would disagree
+  with `row_count`).
+
+### map_sheet_layout
+
+**Kind:** READ
+
+Map one sheet into native Excel tables plus non-table occupied islands in the
+used range (cells inside ListObjects are excluded from islands). Each region
+includes bounds and a header guess (first island row when mostly text). Does not
+create ListObjects or change filters, sort, or hidden columns. File mode does
+not save.
+
+```python
+map_sheet_layout(
+    filepath: str,
+    sheet_name: str,
+    workbook_transport: Optional[str] = None,
+) -> str
+```
+
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top of this file)
+- `sheet_name`: Worksheet to map
+- `workbook_transport`: Optional transport override (`auto` | `file` | `com`)
+- Returns: JSON `{"tables": [...], "regions": [...]}`. Tables reuse `list_tables`
+  fields plus `kind: "table"`. Regions have `kind: "region"`, stable `id`
+  (`"{sheet}!{range}"`), `range`, `header_range`, `header_row`, `columns`, and
+  `header_guess`. Empty sheet → empty `regions` (tables may still be listed).
+
+### query_region
+
+**Kind:** READ
+
+Filter rows from a non-table rectangular region using the same column / where /
+limit / offset contract as `query_table`. Provide exactly one of `region_id`
+(from `map_sheet_layout`) or an explicit A1 `range` (first row is the header).
+Does **not** create a ListObject and does **not** change filters, sort, or hidden
+columns. File mode does not save.
+
+```python
+query_region(
+    filepath: str,
+    sheet_name: str,
+    region_id: Optional[str] = None,
+    range: Optional[str] = None,
+    columns: Optional[list[str]] = None,
+    where: Optional[list[dict]] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str
+```
+
+- `filepath`: Workbook path or cloud locator (see **filepath** section at top of this file)
+- `sheet_name`: Worksheet name
+- `region_id`: Stable id such as `"Sheet1!B4:E20"`. Requires a successful header
+  guess; otherwise pass an explicit `range` that includes a header row.
+- `range`: Explicit A1 range; first row is treated as the header (even when it is
+  not worksheet row 1)
+- `columns` / `where` / `limit` / `offset`: Same semantics as `query_table`
+  (default limit **100**, width threshold **32**)
+- `workbook_transport`: Optional transport override (`auto` | `file` | `com`)
+- `include_routing_metadata`: When `true`, wrap the payload in the ADR 0010
+  envelope; default `false` keeps legacy JSON
+- Returns: Same shape as `query_table`. `view_spec.target` is
+  `{"kind": "region", "sheet": "...", "range": "A1:D10"}` (no ListObject name).
+
 ### create_table
 
 Creates a native Excel table from a specified range of data.

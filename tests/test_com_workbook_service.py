@@ -1032,3 +1032,327 @@ def test_export_worksheet_table_com_invalid_max_rows(book_path):
         raw = svc.export_worksheet_table(book_path, "Sheet1", max_rows=0)
 
     assert raw == "Error: max_rows must be a positive integer"
+
+
+def _list_object_mock(
+    *,
+    name: str,
+    range_addr: str,
+    header_addr: str,
+    data_addr: str | None,
+    data_rows: int,
+    column_names: list[str],
+    filter_mode: bool,
+) -> MagicMock:
+    lo = MagicMock()
+    lo.Name = name
+    lo.Range.Address = range_addr
+    lo.HeaderRowRange.Address = header_addr
+    if data_addr is None:
+        lo.DataBodyRange = None
+    else:
+        body = MagicMock()
+        body.Address = data_addr
+        body.Rows.Count = data_rows
+        lo.DataBodyRange = body
+    lo.ListRows.Count = data_rows
+    cols = MagicMock()
+    cols.Count = len(column_names)
+
+    def _col_item(i: int) -> MagicMock:
+        c = MagicMock()
+        c.Name = column_names[i - 1]
+        return c
+
+    cols.Item = MagicMock(side_effect=_col_item)
+    lo.ListColumns = cols
+    af = MagicMock()
+    af.FilterMode = filter_mode
+    # Sentinel attributes that must never be invoked on a catalog read.
+    af.ShowAllData = MagicMock()
+    lo.AutoFilter = af
+    lo.Sort = MagicMock()
+    return lo
+
+
+def test_list_tables_com_schema_and_empty(book_path):
+    lo = _list_object_mock(
+        name="ap_sw_components",
+        range_addr="$B$2:$D$4",
+        header_addr="$B$2:$D$2",
+        data_addr="$B$3:$D$4",
+        data_rows=2,
+        column_names=["ColA", "ColB", "ColC"],
+        filter_mode=False,
+    )
+    ws_tables = MagicMock()
+    ws_tables.Name = "software components"
+    ws_tables.ListObjects.Count = 1
+    ws_tables.ListObjects.Item = MagicMock(return_value=lo)
+    # Must not use worksheet AutoFilterMode as the filter signal.
+    ws_tables.AutoFilterMode = True
+    ws_tables.AutoFilter = MagicMock()
+    ws_tables.AutoFilter.ShowAllData = MagicMock()
+
+    ws_plain = MagicMock()
+    ws_plain.Name = "stackfleet concept"
+    ws_plain.ListObjects.Count = 0
+
+    sheets = MagicMock()
+    sheets.Count = 2
+    sheets.Item = MagicMock(side_effect=lambda i: ws_tables if i == 1 else ws_plain)
+
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        schema = json.loads(svc.list_tables(book_path, detail="schema"))
+        minimal = json.loads(svc.list_tables(book_path, detail="minimal"))
+        empty_ws = MagicMock()
+        empty_ws.Name = "Only"
+        empty_ws.ListObjects.Count = 0
+        sheets.Count = 1
+        sheets.Item = MagicMock(return_value=empty_ws)
+        empty = json.loads(svc.list_tables(book_path))
+
+    assert len(schema["tables"]) == 1
+    entry = schema["tables"][0]
+    assert entry["sheet"] == "software components"
+    assert entry["name"] == "ap_sw_components"
+    assert entry["range"] == "B2:D4"
+    assert entry["header_range"] == "B2:D2"
+    assert entry["data_range"] == "B3:D4"
+    assert entry["row_count"] == 2
+    assert entry["filter_applied"] is False
+    assert entry["columns"] == ["ColA", "ColB", "ColC"]
+    assert "columns" not in minimal["tables"][0]
+    assert empty == {"tables": []}
+    lo.AutoFilter.ShowAllData.assert_not_called()
+    ws_tables.AutoFilter.ShowAllData.assert_not_called()
+    lo.Sort.assert_not_called()
+
+
+def test_list_tables_com_filter_mode_from_listobject(book_path):
+    lo = _list_object_mock(
+        name="T1",
+        range_addr="$A$1:$B$3",
+        header_addr="$A$1:$B$1",
+        data_addr="$A$2:$B$3",
+        data_rows=2,
+        column_names=["H1", "H2"],
+        filter_mode=True,
+    )
+    ws = MagicMock()
+    ws.Name = "Sheet1"
+    ws.ListObjects.Count = 1
+    ws.ListObjects.Item = MagicMock(return_value=lo)
+    ws.AutoFilterMode = False
+
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(svc.list_tables(book_path, detail="minimal"))
+
+    assert data["tables"][0]["filter_applied"] is True
+
+
+def test_list_tables_com_invalid_detail(book_path):
+    with patch.dict(sys.modules, _fake_win32_modules(MagicMock()), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.list_tables(book_path, detail="full")
+    assert raw.startswith("Error:")
+    assert "detail" in raw.lower()
+
+
+def _query_list_object_mock(
+    *,
+    name: str,
+    column_data: dict[str, list],
+) -> MagicMock:
+    """ListObject mock that exposes per-column DataBodyRange only."""
+    column_names = list(column_data.keys())
+    lo = MagicMock()
+    lo.Name = name
+    lo.Range.Address = "$A$1:$C$4"
+    lo.HeaderRowRange.Address = "$A$1:$C$1"
+    # Whole-table body must not be required for query_table.
+    lo.DataBodyRange = MagicMock()
+    lo.DataBodyRange.Value2 = MagicMock(
+        side_effect=AssertionError("must not read full DataBodyRange")
+    )
+    cols = MagicMock()
+    cols.Count = len(column_names)
+    data_reads: list[str] = []
+
+    def _col_item(key):
+        if isinstance(key, int):
+            col_name = column_names[key - 1]
+        else:
+            col_name = str(key)
+            if col_name not in column_data:
+                raise KeyError(col_name)
+        col = MagicMock()
+        col.Name = col_name
+        values = column_data[col_name]
+
+        class _Body:
+            @property
+            def Value2(self):
+                data_reads.append(col_name)
+                if not values:
+                    return None
+                if len(values) == 1:
+                    return values[0]
+                return tuple((v,) for v in values)
+
+        col.DataBodyRange = _Body()
+        return col
+
+    cols.Item = MagicMock(side_effect=_col_item)
+    lo.ListColumns = cols
+    af = MagicMock()
+    af.FilterMode = True
+    af.ShowAllData = MagicMock()
+    lo.AutoFilter = af
+    lo.Sort = MagicMock()
+    lo._data_reads = data_reads  # type: ignore[attr-defined]
+    return lo
+
+
+def test_query_table_com_selected_columns_only(book_path):
+    lo = _query_list_object_mock(
+        name="Items",
+        column_data={
+            "Name": ["a", "b", "c"],
+            "Qty": [1, 2, 3],
+            "Tag": ["x", "y", "x"],
+            "Wide": list(range(3)),
+        },
+    )
+    ws = MagicMock()
+    ws.Name = "Sheet1"
+    ws.ListObjects.Count = 1
+    ws.ListObjects.Item = MagicMock(return_value=lo)
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        data = json.loads(
+            svc.query_table(
+                book_path,
+                "Items",
+                columns=["Name", "Qty"],
+                where=[{"column": "Tag", "op": "eq", "value": "x"}],
+            )
+        )
+
+    assert data["rows"] == [{"Name": "a", "Qty": 1}, {"Name": "c", "Qty": 3}]
+    assert data["row_count"] == 2
+    assert data["truncated"] is False
+    # Only projection + filter columns were read (not Wide).
+    assert set(lo._data_reads) == {"Name", "Qty", "Tag"}
+    lo.AutoFilter.ShowAllData.assert_not_called()
+    lo.Sort.assert_not_called()
+    assert lo.AutoFilter.FilterMode is True
+
+
+def test_query_table_com_unknown_table(book_path):
+    ws = MagicMock()
+    ws.Name = "Sheet1"
+    ws.ListObjects.Count = 0
+    sheets = MagicMock()
+    sheets.Count = 1
+    sheets.Item = MagicMock(return_value=ws)
+    wb = _workbook_mock(book_path, sheets)
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        raw = svc.query_table(book_path, "Missing")
+    assert raw.startswith("Error:")
+    assert "Table" in raw
+
+
+def test_map_sheet_layout_and_query_region_com_no_mutation(book_path):
+    # UsedRange starts at B4 (header not on worksheet row 1).
+    matrix = (
+        ("Name", "Qty"),
+        ("alpha", 1),
+        ("beta", 2),
+    )
+    lo = _list_object_mock(
+        name="SideTable",
+        range_addr="$E$1:$E$2",
+        header_addr="$E$1",
+        data_addr="$E$2",
+        data_rows=1,
+        column_names=["TCol"],
+        filter_mode=False,
+    )
+    ws = MagicMock()
+    ws.Name = "stackfleet concept"
+    used = MagicMock()
+    used.Row = 4
+    used.Column = 2
+    used.Value2 = matrix
+    ws.UsedRange = used
+    ws.ListObjects.Count = 1
+    ws.ListObjects.Item = MagicMock(return_value=lo)
+    ws.ListObjects.Add = MagicMock(
+        side_effect=AssertionError("must not call ListObjects.Add")
+    )
+    region_rng = MagicMock()
+    region_rng.Value2 = matrix
+    ws.Range = MagicMock(return_value=region_rng)
+    wb = _workbook_mock(book_path, {"stackfleet concept": ws})
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Count = 1
+    xl.Workbooks.Item = MagicMock(side_effect=lambda i: wb)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        layout = json.loads(svc.map_sheet_layout(book_path, "stackfleet concept"))
+        assert layout["tables"][0]["name"] == "SideTable"
+        assert layout["tables"][0]["kind"] == "table"
+        assert len(layout["regions"]) == 1
+        region = layout["regions"][0]
+        assert region["header_row"] == 4
+        assert region["header_guess"] is True
+        assert region["id"] == "stackfleet concept!B4:C6"
+
+        data = json.loads(
+            svc.query_region(
+                book_path,
+                "stackfleet concept",
+                region_id=region["id"],
+                where=[{"column": "Name", "op": "eq", "value": "alpha"}],
+            )
+        )
+    assert data["rows"] == [{"Name": "alpha", "Qty": 1}]
+    assert data["view_spec"]["target"]["kind"] == "region"
+    ws.ListObjects.Add.assert_not_called()
+    lo.AutoFilter.ShowAllData.assert_not_called()
+    lo.Sort.assert_not_called()

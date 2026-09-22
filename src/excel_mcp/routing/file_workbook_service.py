@@ -48,6 +48,10 @@ from excel_mcp.sheet import (
     unmerge_range,
 )
 from excel_mcp.tables import create_excel_table as create_table_impl
+from excel_mcp.tables import list_excel_tables as list_excel_tables_impl
+from excel_mcp.tables import map_excel_sheet_layout as map_excel_sheet_layout_impl
+from excel_mcp.tables import query_excel_region as query_excel_region_impl
+from excel_mcp.tables import query_excel_table as query_excel_table_impl
 from excel_mcp.validation import (
     validate_formula_in_cell_operation,
     validate_range_in_sheet_operation,
@@ -140,6 +144,100 @@ class FileWorkbookService:
             return f"Error: {str(e)}"
         except Exception as e:
             logger.error(f"Error getting workbook metadata: {e}")
+            raise
+
+    def list_tables(
+        self,
+        filepath: str,
+        detail: str = "schema",
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        try:
+            result = list_excel_tables_impl(filepath, detail=detail)
+            return json.dumps(result, indent=2, default=str)
+        except DataError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error listing tables: {e}")
+            raise
+
+    def query_table(
+        self,
+        filepath: str,
+        table: str,
+        columns: Optional[List[str]] = None,
+        where: Optional[List[Dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        try:
+            result = query_excel_table_impl(
+                filepath,
+                table,
+                columns=columns,
+                where=where,
+                limit=limit,
+                offset=offset,
+            )
+            return json.dumps(result, indent=2, default=str)
+        except DataError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error querying table: {e}")
+            raise
+
+    def map_sheet_layout(
+        self,
+        filepath: str,
+        sheet_name: str,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        try:
+            result = map_excel_sheet_layout_impl(filepath, sheet_name)
+            return json.dumps(result, indent=2, default=str)
+        except DataError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error mapping sheet layout: {e}")
+            raise
+
+    def query_region(
+        self,
+        filepath: str,
+        sheet_name: str,
+        region_id: Optional[str] = None,
+        range: Optional[str] = None,
+        columns: Optional[List[str]] = None,
+        where: Optional[List[Dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        del operation_metadata
+        try:
+            result = query_excel_region_impl(
+                filepath,
+                sheet_name,
+                region_id=region_id,
+                range=range,
+                columns=columns,
+                where=where,
+                limit=limit,
+                offset=offset,
+            )
+            return json.dumps(result, indent=2, default=str)
+        except DataError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error querying region: {e}")
             raise
 
     def read_merged_cell_ranges(

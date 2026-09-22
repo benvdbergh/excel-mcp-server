@@ -65,6 +65,52 @@ class _AllRoutedOpsDummy:
     ) -> str:
         return ""
 
+    def list_tables(
+        self,
+        filepath: str,
+        detail: str = "schema",
+        *,
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
+    def query_table(
+        self,
+        filepath: str,
+        table: str,
+        columns: Optional[list[str]] = None,
+        where: Optional[list[dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        *,
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
+    def map_sheet_layout(
+        self,
+        filepath: str,
+        sheet_name: str,
+        *,
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
+    def query_region(
+        self,
+        filepath: str,
+        sheet_name: str,
+        region_id: Optional[str] = None,
+        range: Optional[str] = None,
+        columns: Optional[list[str]] = None,
+        where: Optional[list[dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        *,
+        operation_metadata: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return ""
+
     def read_merged_cell_ranges(
         self,
         filepath: str,

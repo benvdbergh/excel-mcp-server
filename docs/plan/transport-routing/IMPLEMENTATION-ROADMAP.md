@@ -21,6 +21,8 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | 11 | [Epic-11](Epics/Epic-11-com-first-session-and-lifecycle.md) | COM-first default routing, COM read parity, remove `save_after_write`, lifecycle tools, docs/tests *(delivered; **0.3.0**)* |
 | 12 | [Epic-12](Epics/Epic-12-open-workbook-discovery-tool.md) | Open workbook discovery MCP tool **`excel_list_open_workbooks`**, ADR 0009 *(delivered; **0.4.0**)* |
 | — | *(post-Epic-12 / 0.5.0)* | Agent reliability & read fidelity: ADR 0010 envelope, `value_mode`, bulk export, recalc, compact reads, discovery `detail` — see [`CHANGELOG.md`](../../../CHANGELOG.md#050--2026-06-23) |
+| 13 | [Epic-13](Epics/Epic-13-table-catalog-and-row-query.md) | Table catalog and row query *(implemented)* |
+| 14 | [Epic-14](Epics/Epic-14-excel-view-from-query-spec.md) | Excel view from a query spec *(draft; depends on Epic-13)* |
 
 ## Post-Epic-12: 0.5.0 agent reliability (delivered)
 
@@ -112,6 +114,12 @@ flowchart TD
 **Parallelization:** **11-1** and **11-2** can start together after kickoff; **11-3** follows **11-1**. **11-4** and **11-5** parallelize after **11-3**. **11-6** can overlap **11-4**/**11-5** once **11-1** is stable. **11-7** runs continuously and completes last.
 
 **Supersedes Epic-10:** Epic-10 assumed **default file-backed reads** and **explicit COM read opt-in** ([ADR 0007](../../architecture/adr/0007-com-read-class-tools-routing.md)). **ADR 0008** inverts defaults and adds lifecycle tools; **Epic-11** is the active backlog.
+
+## Next: table catalog and Excel views (draft)
+
+Epics **13** and **14** are not part of the transport-routing delivery. They add a data plane (`list_tables`, `query_table`, `map_sheet_layout`, `query_region`) and a COM presentation plane (`apply_table_view`, `clear_table_view`). Normative behavior, including the 2026-09-23 Excel COM checks, is in [`docs/specs/table-catalog-query-and-views.md`](../../specs/table-catalog-query-and-views.md).
+
+**Sequence:** 13-1 → 13-2 → 13-3. Epic-14 starts at 14-1 after 13-2. 14-2 waits on 13-3 and 14-1. 14-3 waits on 14-1 and can run beside 14-2.
 
 ## Architecture traceability
 
