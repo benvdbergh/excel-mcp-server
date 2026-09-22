@@ -1276,6 +1276,101 @@ def query_region(
         logger.error(f"Error querying region: {e}")
         raise
 
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Apply Table View",
+        destructiveHint=True,
+    ),
+)
+def apply_table_view(
+    filepath: str,
+    view_spec: dict,
+    mode: str = "in_place",
+    view_applicability: Optional[dict] = None,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str:
+    """Apply a ``view_spec`` as an Excel view (in_place or snapshot).
+
+    COM-only WRITE. ``in_place`` applies AutoFilter / optional Sort / column
+    focus on a ListObject or plain region (shared desktop view). ``snapshot``
+    writes the projected, filtered, sorted result to a new values-only sheet and
+    leaves the source unchanged. File transport returns an error without mutating
+    the xlsx.
+
+    Returns JSON including ``restore_token`` for ``clear_table_view``.
+    """
+    try:
+        return _workbook_dispatch(
+            "apply_table_view",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.apply_table_view(
+                fp,
+                view_spec,
+                mode=mode,
+                view_applicability=view_applicability,
+            ),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.apply_table_view(
+                    fp,
+                    view_spec,
+                    mode=mode,
+                    view_applicability=view_applicability,
+                )
+            ),
+            include_routing_metadata=include_routing_metadata,
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error applying table view: {e}")
+        raise
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Clear Table View",
+        destructiveHint=True,
+    ),
+)
+def clear_table_view(
+    filepath: str,
+    restore_token: dict,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str:
+    """Clear a view using a ``restore_token`` from ``apply_table_view``.
+
+    COM-only WRITE. ListObject tokens use ``ListObject.AutoFilter.ShowAllData()``
+    (not ``Worksheet.AutoFilterMode``). Plain-range tokens restore prior
+    ``AutoFilterMode``. Snapshot tokens delete only the sheet this tool created
+    (``kind: snapshot`` with ``created_by_tool: true``). Unhides only columns
+    this tool hid for in-place tokens. File transport returns an error.
+    """
+    try:
+        return _workbook_dispatch(
+            "clear_table_view",
+            filepath,
+            workbook_transport,
+            lambda fp: _FILE_WORKBOOK_SERVICE.clear_table_view(fp, restore_token),
+            com_do_op=_com_dispatch(
+                lambda c, fp: c.clear_table_view(fp, restore_token)
+            ),
+            include_routing_metadata=include_routing_metadata,
+        )
+    except WorkbookError as e:
+        return f"Error: {str(e)}"
+    except (ComRoutingError, ComExecutionNotImplementedError, ValueError) as e:
+        return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Error clearing table view: {e}")
+        raise
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         title="Merge Cells",

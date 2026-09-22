@@ -552,3 +552,36 @@ def test_query_region_explicit_range_and_errors(tmp_path) -> None:
     unknown = svc.query_region(path, "Sheet1", region_id="Sheet1!Z9:Z10")
     assert unknown.startswith("Error:")
     assert "region" in unknown.lower()
+
+
+def test_apply_and_clear_table_view_file_require_com(tmp_path) -> None:
+    p = tmp_path / "view_file.xlsx"
+    Workbook().save(p)
+    path = str(p.resolve())
+    mtime = p.stat().st_mtime_ns
+    svc = FileWorkbookService()
+    view_spec = {
+        "target": {"kind": "table", "name": "T1"},
+        "columns": ["A"],
+        "where": [],
+        "sort": None,
+    }
+    apply_err = svc.apply_table_view(path, view_spec, mode="in_place")
+    assert apply_err.startswith("Error:")
+    assert "COM" in apply_err
+    clear_err = svc.clear_table_view(
+        path,
+        {
+            "v": 1,
+            "kind": "listobject",
+            "table": "T1",
+            "sheet": "Sheet",
+            "prior_filters": [],
+            "prior_sort": [],
+            "sort_applied": False,
+            "columns_hidden": [],
+        },
+    )
+    assert clear_err.startswith("Error:")
+    assert "COM" in clear_err
+    assert p.stat().st_mtime_ns == mtime

@@ -577,6 +577,118 @@ query_region(
 - Returns: Same shape as `query_table`. `view_spec.target` is
   `{"kind": "region", "sheet": "...", "range": "A1:D10"}` (no ListObject name).
 
+### apply_table_view
+
+**Kind:** WRITE · **COM only**
+
+Show a `view_spec` (from `query_table` or `query_region`) in Excel.
+
+- **`in_place`**: mutates the **shared desktop view** on the source sheet (filters,
+  sort, and hidden columns that co-authors also see). This is **not** a personal
+  or named sheet view.
+- **`snapshot`**: leaves the shared source sheet alone. Creates one new worksheet
+  of **values only** (header + projected, filtered, sorted rows) via
+  `Worksheets.Add` and a cell-value write. Does **not** call `Worksheet.Copy` and
+  does **not** create a ListObject on the new sheet. Use snapshot when others
+  have the workbook open and an in-place filter would be the wrong visual.
+
+Supports `mode="in_place"` on a ListObject (`target.kind == "table"`) and on a
+plain region (`target.kind == "region"`), and `mode="snapshot"` for both targets.
+
+```python
+apply_table_view(
+    filepath: str,
+    view_spec: dict,
+    mode: str = "in_place",
+    view_applicability: Optional[dict] = None,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str
+```
+
+- `filepath`: Workbook path or cloud locator (must be open in Excel for COM)
+- `view_spec`: From `query_table` / `query_region`, optionally with `sort` set.
+  Table shape: `{"target": {"kind": "table", "name": "..."}, "columns": [...],
+  "where": [...], "sort": null | {"by": [{"column": "Qty", "order": "asc"|"desc"}]} }`.
+  Region shape: `{"target": {"kind": "region", "sheet": "...", "range": "A1:D10"},
+  ...}` (no ListObject name). Single-key sugar: `{"column": "Qty", "order": "asc"}`
+  is also accepted for `sort`. Field indexes for AutoFilter are relative to the
+  **table or region header**, not column A.
+- ListObject in-place path: `ListObject` AutoFilter + optional `ListObject.Sort`.
+- Plain-range in-place path: `Range.AutoFilter` on that range (does **not** call
+  `ListObjects.Add`). Optional sort uses `Worksheet.Sort` with a header row.
+  While applied, `Worksheet.AutoFilterMode` and `FilterMode` are true.
+- `mode`:
+  - `in_place` (default): shared desktop filter/sort/focus on the source sheet.
+  - `snapshot`: new sheet of query result values; source FilterMode, row order,
+    and hidden columns stay unchanged. Snapshot sheet names are deterministic and
+    collision-safe: `mcp_view`, then `mcp_view_2`, `mcp_view_3`, … (case-insensitive
+    match against existing sheet names). Honors `limit` / `offset` on the
+    `view_spec` when present (copy of the selected page). When both are absent,
+    writes the **full** filtered/sorted set (does **not** apply the `query_table`
+    default page size of 100).
+- `view_applicability`: Optional payload from `query_table` / `query_region`.
+  For **in_place**, when `viewable` is `false` (limit/offset truncation,
+  `is_empty`, etc.), the call is refused and the sheet is not changed. Prefer
+  refusing the whole call over a partial view. For **snapshot**,
+  limit/offset-related `viewable: false` does **not** block the call (the sheet
+  is a copy of that page). Cross-column OR and non-viewable operators
+  (`is_empty`) are still refused in both modes.
+- Refused (sheet unchanged):
+  - **in_place**: `limit` / `offset` on the spec, cross-column OR, non-viewable
+    operators, `view_applicability.viewable is false`, file transport.
+  - **snapshot**: cross-column OR, non-viewable operators, file transport.
+  In-place sort runs only when a previous sort was captured and can be put
+  back. If there is no prior sort, or it cannot be captured, the **sort
+  portion** is skipped (filters and column focus may still apply) and a warning
+  tells the caller to use snapshot mode. Clearing sort fields does not undo a
+  reorder, so the tool does not apply a sort it cannot restore.
+  A snapshot of a paged query must carry that `limit` and `offset` on
+  `view_spec`. If `view_applicability` says the query was limited or offset and
+  those fields are missing, snapshot is refused so the sheet cannot show a
+  different row set.
+- Column focus (in_place only): hides worksheet columns for fields not listed in
+  `view_spec.columns` that were previously visible. Hiding a column hides the
+  whole sheet column.
+- `workbook_transport`: File backend returns a clear COM-required error and does
+  not mutate the xlsx.
+- Returns: JSON with `restore_token`. In-place tokens carry kind, prior filters,
+  prior sort when captured, columns this call hid (ranges also prior
+  `AutoFilterMode` and the A1 range). Snapshot tokens are
+  `{"v": 1, "kind": "snapshot", "sheet": "<name>", "created_by_tool": true}`.
+
+### clear_table_view
+
+**Kind:** WRITE · **COM only**
+
+Restore the sheet using a `restore_token` from `apply_table_view`.
+
+```python
+clear_table_view(
+    filepath: str,
+    restore_token: dict,
+    workbook_transport: Optional[str] = None,
+    include_routing_metadata: bool = False,
+) -> str
+```
+
+- **ListObject tokens** (`kind: "listobject"`): clear with
+  `ListObject.AutoFilter.ShowAllData()` (works when `FilterMode` is true even if
+  `Worksheet.AutoFilterMode` is false). Does **not** clear via
+  `Worksheet.AutoFilterMode`.
+- **Plain-range tokens** (`kind: "range"`): clear via worksheet AutoFilter /
+  restoring prior `AutoFilterMode` (whether filter arrows were already on). Do
+  **not** clear a plain-range filter by only calling
+  `ListObject.AutoFilter.ShowAllData()`.
+- **Snapshot tokens** (`kind: "snapshot"`): deletes **only** the sheet named in
+  the token, and only when `created_by_tool` is `true` (this tool created that
+  sheet). Does not delete arbitrary sheets.
+- Re-applies prior filter criteria from the token (in-place kinds), restores prior
+  sort when this apply had changed sort, and unhides **only** columns listed in
+  `restore_token.columns_hidden` (columns the user already had hidden stay
+  hidden).
+- File transport returns a clear COM-required error without mutating the xlsx.
+
 ### create_table
 
 Creates a native Excel table from a specified range of data.

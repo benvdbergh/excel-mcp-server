@@ -228,6 +228,27 @@ def test_query_region_routing_envelope(tmp_path: Path) -> None:
     assert envelope["result"]["row_count"] == 1
 
 
+def test_apply_table_view_file_transport_error(tmp_path: Path) -> None:
+    p = tmp_path / "route_view.xlsx"
+    Workbook().save(p)
+    path = str(p.resolve())
+
+    from excel_mcp import server as srv
+
+    err = srv.apply_table_view(
+        path,
+        {
+            "target": {"kind": "table", "name": "T1"},
+            "columns": ["A"],
+            "where": [],
+            "sort": None,
+        },
+        workbook_transport="file",
+    )
+    assert err.startswith("Error:")
+    assert "COM" in err
+
+
 def test_write_path_file_backend(tmp_path: Path) -> None:
     p = tmp_path / "route_write.xlsx"
     Workbook().save(p)

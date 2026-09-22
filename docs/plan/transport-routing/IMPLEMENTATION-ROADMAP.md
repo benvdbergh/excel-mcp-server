@@ -22,7 +22,7 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | 12 | [Epic-12](Epics/Epic-12-open-workbook-discovery-tool.md) | Open workbook discovery MCP tool **`excel_list_open_workbooks`**, ADR 0009 *(delivered; **0.4.0**)* |
 | — | *(post-Epic-12 / 0.5.0)* | Agent reliability & read fidelity: ADR 0010 envelope, `value_mode`, bulk export, recalc, compact reads, discovery `detail` — see [`CHANGELOG.md`](../../../CHANGELOG.md#050--2026-06-23) |
 | 13 | [Epic-13](Epics/Epic-13-table-catalog-and-row-query.md) | Table catalog and row query *(implemented)* |
-| 14 | [Epic-14](Epics/Epic-14-excel-view-from-query-spec.md) | Excel view from a query spec *(draft; depends on Epic-13)* |
+| 14 | [Epic-14](Epics/Epic-14-excel-view-from-query-spec.md) | Excel view from a query spec *(done; depends on Epic-13)* |
 
 ## Post-Epic-12: 0.5.0 agent reliability (delivered)
 

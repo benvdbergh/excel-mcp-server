@@ -40,6 +40,8 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "query_table",
         "map_sheet_layout",
         "query_region",
+        "apply_table_view",
+        "clear_table_view",
         "merge_cells",
         "unmerge_cells",
         "get_merged_cells",
@@ -89,8 +91,8 @@ def test_inventory_matches_server_mcp_tool_decorators() -> None:
     assert _mcp_tool_names_from_server() == frozenset(MCP_TOOL_INVENTORY)
 
 
-def test_inventory_has_exactly_35_keys() -> None:
-    assert len(MCP_TOOL_INVENTORY) == 35
+def test_inventory_has_exactly_37_keys() -> None:
+    assert len(MCP_TOOL_INVENTORY) == 37
 
 
 def test_every_key_matches_expected_set_or_pattern() -> None:
@@ -123,6 +125,11 @@ def test_at_least_one_read_tool_is_read() -> None:
     assert get_tool_kind("query_table") is ToolKind.READ
     assert get_tool_kind("map_sheet_layout") is ToolKind.READ
     assert get_tool_kind("query_region") is ToolKind.READ
+
+
+def test_view_tools_are_write() -> None:
+    assert get_tool_kind("apply_table_view") is ToolKind.WRITE
+    assert get_tool_kind("clear_table_view") is ToolKind.WRITE
 
 
 def test_lifecycle_tools_are_session() -> None:

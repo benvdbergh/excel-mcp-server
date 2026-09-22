@@ -13,12 +13,21 @@ if _SRC not in sys.path:
 from excel_mcp.exceptions import DataError  # noqa: E402
 from excel_mcp.tables import (  # noqa: E402
     MAX_QUERY_TABLE_COLUMNS_WITHOUT_EXPLICIT,
+    XL_FILTER_OR,
+    XL_FILTER_VALUES,
+    allocate_unique_sheet_name,
+    build_snapshot_value_matrix,
+    compile_autofilter_field_steps,
+    criteria_text_for_clause,
     evaluate_row_clause,
     filter_table_rows,
     guess_header_from_row,
     layout_regions_from_grid,
+    normalize_view_sort,
     query_region_rows,
     query_table_rows,
+    sort_table_rows,
+    validate_view_spec_for_apply,
 )
 
 
@@ -223,3 +232,174 @@ def test_layout_regions_do_not_cover_table_cells() -> None:
     for region in regions:
         assert not region["range"].startswith("C1")
         assert "C1:D2" not in region["range"]
+
+
+def test_validate_view_spec_refuses_limit_offset_inplace_and_is_empty() -> None:
+    base = {
+        "target": {"kind": "table", "name": "T1"},
+        "columns": ["A"],
+        "where": [{"column": "A", "op": "eq", "value": 1}],
+        "sort": None,
+    }
+    with pytest.raises(DataError, match="limit"):
+        validate_view_spec_for_apply({**base, "limit": 10}, mode="in_place")
+    with pytest.raises(DataError, match="offset"):
+        validate_view_spec_for_apply({**base, "offset": 1}, mode="in_place")
+    with pytest.raises(DataError, match="not viewable"):
+        validate_view_spec_for_apply(
+            {
+                **base,
+                "where": [{"column": "A", "op": "is_empty"}],
+            },
+            mode="in_place",
+            table_columns=["A"],
+        )
+    with pytest.raises(DataError, match="not viewable"):
+        validate_view_spec_for_apply(
+            {
+                **base,
+                "where": [{"column": "A", "op": "is_empty"}],
+            },
+            mode="snapshot",
+            table_columns=["A"],
+        )
+    with pytest.raises(DataError, match="limit truncates|viewable"):
+        validate_view_spec_for_apply(
+            base,
+            mode="in_place",
+            view_applicability={"viewable": False, "reason": "limit truncates"},
+        )
+
+
+def test_validate_view_spec_snapshot_honors_limit_offset() -> None:
+    base = {
+        "target": {"kind": "table", "name": "T1"},
+        "columns": ["A"],
+        "where": [{"column": "A", "op": "eq", "value": 1}],
+        "sort": None,
+    }
+    out = validate_view_spec_for_apply(
+        {**base, "limit": 2, "offset": 1},
+        mode="snapshot",
+        table_columns=["A"],
+        view_applicability={
+            "viewable": False,
+            "reason": "limit truncates matching rows",
+        },
+    )
+    assert out["mode"] == "snapshot"
+    assert out["limit"] == 2
+    assert out["offset"] == 1
+    # Absent limit/offset → full result (no default page size of 100).
+    full = validate_view_spec_for_apply(base, mode="snapshot", table_columns=["A"])
+    assert full["limit"] is None
+    assert full["offset"] == 0
+    with pytest.raises(DataError, match="no limit or offset"):
+        validate_view_spec_for_apply(
+            base,
+            mode="snapshot",
+            table_columns=["A"],
+            view_applicability={
+                "viewable": False,
+                "reason": "limit truncates matching rows",
+            },
+        )
+
+
+def test_allocate_unique_sheet_name_and_snapshot_matrix() -> None:
+    assert allocate_unique_sheet_name([]) == "mcp_view"
+    assert allocate_unique_sheet_name(["mcp_view"]) == "mcp_view_2"
+    assert allocate_unique_sheet_name(["MCP_VIEW", "mcp_view_2"]) == "mcp_view_3"
+    rows = [
+        {"A": 1, "B": "x"},
+        {"A": 2, "B": "y"},
+        {"A": 3, "B": "z"},
+    ]
+    sorted_rows = sort_table_rows(
+        rows, {"by": [{"column": "A", "order": "desc"}]}
+    )
+    assert [r["A"] for r in sorted_rows] == [3, 2, 1]
+    matrix = build_snapshot_value_matrix(
+        headers=["A", "B"],
+        matching_rows=sorted_rows,
+        limit=2,
+        offset=1,
+    )
+    assert matrix == [["A", "B"], [2, "y"], [1, "x"]]
+    full = build_snapshot_value_matrix(
+        headers=["A"], matching_rows=rows, limit=None, offset=0
+    )
+    assert full == [["A"], [1], [2], [3]]
+
+
+def test_validate_view_spec_accepts_region_target() -> None:
+    out = validate_view_spec_for_apply(
+        {
+            "target": {"kind": "region", "sheet": "S", "range": "$A$1:$B$2"},
+            "columns": ["A"],
+            "where": [{"column": "A", "op": "eq", "value": 1}],
+            "sort": None,
+        },
+        mode="in_place",
+        table_columns=["A", "B"],
+    )
+    assert out["target_kind"] == "region"
+    assert out["target_sheet"] == "S"
+    assert out["target_range"] == "A1:B2"
+    assert out["where"][0]["op"] == "eq"
+
+
+def test_validate_view_spec_refuses_cross_column_or() -> None:
+    with pytest.raises(DataError, match="Cross-column OR|Nested OR"):
+        validate_view_spec_for_apply(
+            {
+                "target": {"kind": "table", "name": "T1"},
+                "columns": ["A", "B"],
+                "where": [
+                    {
+                        "op": "or",
+                        "clauses": [
+                            {"column": "A", "op": "eq", "value": 1},
+                            {"column": "B", "op": "eq", "value": 2},
+                        ],
+                    }
+                ],
+                "sort": None,
+            },
+            mode="in_place",
+            table_columns=["A", "B"],
+        )
+
+
+def test_normalize_view_sort_and_autofilter_compile() -> None:
+    sort = normalize_view_sort(
+        {"by": [{"column": "Qty", "order": "desc"}]},
+        known_columns=["Name", "Qty"],
+    )
+    assert sort == {"by": [{"column": "Qty", "order": "desc"}]}
+    sugar = normalize_view_sort(
+        {"column": "Name", "order": "asc"}, known_columns=["Name", "Qty"]
+    )
+    assert sugar == {"by": [{"column": "Name", "order": "asc"}]}
+
+    two = criteria_text_for_clause(
+        {"column": "Tag", "op": "in", "value": ["x", "y"]}
+    )
+    assert two["operator"] == XL_FILTER_OR
+    assert two["criteria1"] == "x"
+    assert two["criteria2"] == "y"
+    many = criteria_text_for_clause(
+        {"column": "Tag", "op": "in", "value": ["a", "b", "c"]}
+    )
+    assert many["operator"] == XL_FILTER_VALUES
+    contains = criteria_text_for_clause(
+        {"column": "Tag", "op": "contains", "value": "a*b?c~d"}
+    )
+    assert contains["criteria1"] == "*a~*b~?c~~d*"
+
+    # Field index is table-relative (Name=1 even if sheet column is B).
+    steps = compile_autofilter_field_steps(
+        [{"column": "Qty", "op": "gt", "value": 1}],
+        column_to_field={"Name": 1, "Qty": 2},
+    )
+    assert steps == [{"field": 2, "column": "Qty", "criteria1": ">1"}]

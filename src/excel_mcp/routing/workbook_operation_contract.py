@@ -307,6 +307,35 @@ class WorkbookWriteOperations(Protocol):
         """Create a native ListObject / table over a range."""
         ...
 
+    def apply_table_view(
+        self,
+        filepath: str,
+        view_spec: dict[str, Any],
+        mode: str = "in_place",
+        view_applicability: Optional[dict[str, Any]] = None,
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Apply a ``view_spec`` as an Excel desktop view (MCP: ``apply_table_view``).
+
+        COM-only for STORY-14-1 (ListObject in_place). File backends must return
+        a clear error without mutating the workbook.
+        """
+        ...
+
+    def clear_table_view(
+        self,
+        filepath: str,
+        restore_token: dict[str, Any],
+        *,
+        operation_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Restore filters/sort/columns from ``restore_token`` (MCP: ``clear_table_view``).
+
+        COM-only. File backends must return a clear error without mutation.
+        """
+        ...
+
     def copy_worksheet(
         self,
         filepath: str,
@@ -479,6 +508,8 @@ ROUTED_WORKBOOK_OPERATION_NAMES: tuple[str, ...] = (
     "create_chart_in_sheet",
     "create_pivot_table_in_sheet",
     "create_excel_table",
+    "apply_table_view",
+    "clear_table_view",
     "copy_worksheet",
     "delete_worksheet",
     "rename_worksheet",
