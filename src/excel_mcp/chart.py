@@ -10,10 +10,6 @@ from openpyxl.chart import (
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.legend import Legend
 from openpyxl.chart.axis import ChartLines
-from openpyxl.drawing.spreadsheet_drawing import (
-    AnchorMarker, OneCellAnchor, SpreadsheetDrawing
-)
-from openpyxl.utils import column_index_from_string
 
 from .cell_utils import parse_cell_range
 from .exceptions import ValidationError, ChartError
@@ -79,19 +75,17 @@ def create_chart_in_sheet(
             raise ValidationError(f"Sheet '{sheet_name}' not found")
 
         worksheet = wb[sheet_name]
-
-        # Initialize collections if they don't exist
-        if not hasattr(worksheet, '_drawings'):
-            worksheet._drawings = []
-        if not hasattr(worksheet, '_charts'):
-            worksheet._charts = []
+        data_ws = worksheet
 
         # Parse the data range
         if "!" in data_range:
-            range_sheet_name, cell_range = data_range.split("!")
+            range_sheet_name, cell_range = data_range.split("!", 1)
+            if range_sheet_name.startswith("'") and range_sheet_name.endswith("'"):
+                range_sheet_name = range_sheet_name[1:-1]
             if range_sheet_name not in wb.sheetnames:
                 logger.error(f"Sheet '{range_sheet_name}' referenced in data range not found")
                 raise ValidationError(f"Sheet '{range_sheet_name}' referenced in data range not found")
+            data_ws = wb[range_sheet_name]
         else:
             cell_range = data_range
 
@@ -135,13 +129,13 @@ def create_chart_in_sheet(
                 # For scatter charts, create series for each pair of columns
                 for col in range(start_col + 1, end_col + 1):
                     x_values = Reference(
-                        worksheet,
+                        data_ws,
                         min_row=start_row + 1,
                         max_row=end_row,
                         min_col=start_col
                     )
                     y_values = Reference(
-                        worksheet,
+                        data_ws,
                         min_row=start_row + 1,
                         max_row=end_row,
                         min_col=col
@@ -151,14 +145,14 @@ def create_chart_in_sheet(
             else:
                 # For other chart types
                 data = Reference(
-                    worksheet,
+                    data_ws,
                     min_row=start_row,
                     max_row=end_row,
                     min_col=start_col + 1,
                     max_col=end_col
                 )
                 cats = Reference(
-                    worksheet,
+                    data_ws,
                     min_row=start_row + 1,
                     max_row=end_row,
                     min_col=start_col
@@ -209,25 +203,9 @@ def create_chart_in_sheet(
         chart.width = 15
         chart.height = 7.5
 
-        # Create drawing and anchor
         try:
-            drawing = SpreadsheetDrawing()
-            drawing.chart = chart
-
-            # Validate target cell format
-            if not target_cell or not any(c.isalpha() for c in target_cell) or not any(c.isdigit() for c in target_cell):
-                raise ValidationError(f"Invalid target cell format: {target_cell}")
-
-            # Create anchor
-            col = column_index_from_string(target_cell[0]) - 1
-            row = int(target_cell[1:]) - 1
-            anchor = OneCellAnchor()
-            anchor._from = AnchorMarker(col=col, row=row)
-            drawing.anchor = anchor
-
-            # Add to worksheet
-            worksheet._drawings.append(drawing)
-            worksheet._charts.append(chart)
+            parse_cell_range(target_cell, target_cell)
+            worksheet.add_chart(chart, target_cell)
         except ValueError as e:
             logger.error(f"Invalid target cell: {e}")
             raise ValidationError(f"Invalid target cell: {str(e)}")

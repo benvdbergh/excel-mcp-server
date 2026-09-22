@@ -1,5 +1,6 @@
 """Authoritative MCP tool inventory (read/write/v1 exception)."""
 
+import ast
 import os
 import re
 import sys
@@ -54,6 +55,34 @@ _EXPECTED_TOOL_NAMES = frozenset(
 )
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _is_mcp_tool_decorator(node: ast.AST) -> bool:
+    if isinstance(node, ast.Call):
+        node = node.func
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "tool"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "mcp"
+    )
+
+
+def _mcp_tool_names_from_server() -> frozenset[str]:
+    path = os.path.join(_SRC, "excel_mcp", "server.py")
+    with open(path, encoding="utf-8") as fh:
+        tree = ast.parse(fh.read(), filename=path)
+    names: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if any(_is_mcp_tool_decorator(dec) for dec in node.decorator_list):
+            names.append(node.name)
+    return frozenset(names)
+
+
+def test_inventory_matches_server_mcp_tool_decorators() -> None:
+    assert _mcp_tool_names_from_server() == frozenset(MCP_TOOL_INVENTORY)
 
 
 def test_inventory_has_exactly_31_keys() -> None:

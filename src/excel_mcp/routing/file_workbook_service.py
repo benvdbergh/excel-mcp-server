@@ -92,9 +92,9 @@ class FileWorkbookService:
                 metadata_mode=metadata_mode,
                 file_backend_warnings=file_backend_warnings,
             )
-            if not result or not result.get("cells"):
-                return "No data found in specified range"
             return json.dumps(result, indent=2, default=str)
+        except DataError as e:
+            return f"Error: {str(e)}"
         except Exception as e:
             logger.error(f"Error reading data: {e}")
             raise

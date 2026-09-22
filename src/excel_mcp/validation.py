@@ -202,9 +202,10 @@ def validate_range_bounds(
     end_row: int | None = None,
     end_col: int | None = None,
 ) -> tuple[bool, str]:
-    """Validate that cell range is within worksheet bounds"""
-    max_row = worksheet.max_row
-    max_col = worksheet.max_column
+    """Validate that cell range is within Excel worksheet limits."""
+    del worksheet
+    max_row = 1_048_576
+    max_col = 16_384
 
     try:
         # Check start cell bounds

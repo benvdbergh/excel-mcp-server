@@ -469,6 +469,22 @@ def test_create_workbook_add_and_saveas(book_path):
     wb_new.SaveAs.assert_called_once()
 
 
+def test_create_workbook_saveas_failure_closes_orphan(book_path):
+    wb_new = MagicMock()
+    wb_new.SaveAs.side_effect = RuntimeError("save failed")
+    xl = MagicMock()
+    xl.Workbooks = MagicMock()
+    xl.Workbooks.Add = MagicMock(return_value=wb_new)
+
+    with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
+        svc = ComWorkbookService(ImmediateExecutor())
+        msg = svc.create_workbook(book_path)
+
+    assert msg.startswith("Error:")
+    assert "save failed" in msg
+    wb_new.Close.assert_called_once_with(SaveChanges=False)
+
+
 def test_create_worksheet_adds_sheet(book_path):
     ws_new = MagicMock()
     existing = {"Sheet1": MagicMock()}
@@ -635,9 +651,16 @@ def test_get_open_workbook_com_read_only(book_path):
 
     with patch.dict(sys.modules, _fake_win32_modules(xl), clear=False):
         wb_out, err = ComWorkbookService._get_open_workbook_com(book_path)
+        wb_write, err_write = ComWorkbookService._get_open_workbook_com(
+            book_path, for_write=True
+        )
+        close_msg = ComWorkbookService._close_workbook_in_excel_com(book_path, False)
 
-    assert wb_out is None
-    assert err == "Error: Workbook is read-only in Excel; COM routing cannot modify this workbook."
+    assert wb_out is wb
+    assert err is None
+    assert wb_write is None
+    assert err_write == "Error: Workbook is read-only in Excel; COM routing cannot modify this workbook."
+    assert close_msg.startswith("Workbook closed")
 
 
 def test_get_open_workbook_com_protected_view_only(book_path):

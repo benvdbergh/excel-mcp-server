@@ -104,7 +104,20 @@ def test_read_range_with_metadata_json(mock_read: MagicMock) -> None:
 def test_read_range_with_metadata_empty(mock_read: MagicMock) -> None:
     mock_read.return_value = {"cells": []}
     svc = FileWorkbookService()
-    assert svc.read_range_with_metadata("/abs/b.xlsx", "S") == "No data found in specified range"
+    out = svc.read_range_with_metadata("/abs/b.xlsx", "S")
+    data = json.loads(out)
+    assert data["cells"] == []
+
+
+def test_read_range_with_metadata_missing_sheet_returns_error(tmp_path) -> None:
+    p = tmp_path / "book.xlsx"
+    wb = Workbook()
+    wb.active.title = "Sheet1"
+    wb.save(p)
+    svc = FileWorkbookService()
+    out = svc.read_range_with_metadata(str(p.resolve()), "Missing")
+    assert out.startswith("Error:")
+    assert "Missing" in out
 
 
 def test_read_range_with_metadata_invalid_value_mode() -> None:

@@ -67,7 +67,7 @@ def test_one_matching_workbook_true(book_path):
         assert port.is_workbook_open_in_excel(book_path) is True
 
 
-def test_two_matching_workbooks_false(book_path):
+def test_two_matching_workbooks_true(book_path):
     wb1 = MagicMock()
     wb1.FullName = book_path
     wb2 = MagicMock()
@@ -79,7 +79,7 @@ def test_two_matching_workbooks_false(book_path):
 
     with patch.dict(sys.modules, _fake_win32(xl), clear=False):
         port = ComWorkbookOpenInExcel(ImmediateExecutor())
-        assert port.is_workbook_open_in_excel(book_path) is False
+        assert port.is_workbook_open_in_excel(book_path) is True
 
 
 def test_https_workbook_operator_and_excel_fullname_equivalent(book_path, tmp_path):

@@ -591,6 +591,8 @@ def create_workbook(
                 )
             if not str(out).lstrip().lower().startswith("error:"):
                 extra = _COM_WORKBOOK_SERVICE.open_workbook_in_excel(resolved)
+                if str(extra).lstrip().lower().startswith("error:"):
+                    return f"Error: {out}\n{extra}"
                 return f"{out}\n{extra}"
         return out
     except WorkbookError as e:

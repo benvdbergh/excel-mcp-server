@@ -678,7 +678,7 @@ class ComWorkbookService:
         return unique
 
     @staticmethod
-    def _get_open_workbook_com(filepath: str) -> Tuple[Any, Optional[str]]:
+    def _get_open_workbook_com(filepath: str, *, for_write: bool = False) -> Tuple[Any, Optional[str]]:
         """Return ``(workbook_com, None)`` or ``(None, error_message)``.
 
         Never-saved workbooks (e.g. ``Book1``) expose a **non-disk** ``FullName`` and an
@@ -727,11 +727,12 @@ class ComWorkbookService:
         wb_com = matches[0]
         if workbook_in_protected_view(xl, wb_com):
             return None, _ERR_COM_PROTECTED_VIEW
-        try:
-            if _com_bool_is_true(getattr(wb_com, "ReadOnly", False)):
-                return None, _ERR_COM_READ_ONLY
-        except Exception:
-            pass
+        if for_write:
+            try:
+                if _com_bool_is_true(getattr(wb_com, "ReadOnly", False)):
+                    return None, _ERR_COM_READ_ONLY
+            except Exception:
+                pass
         return wb_com, None
 
     def read_range_with_metadata(
@@ -1209,7 +1210,7 @@ class ComWorkbookService:
 
     @staticmethod
     def _close_workbook_in_excel_com(filepath: str, save: bool) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=save)
         if err:
             return err
         try:
@@ -1378,7 +1379,7 @@ class ComWorkbookService:
         if not is_valid:
             return f"Error: Invalid formula syntax: {vmsg}"
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -1477,7 +1478,7 @@ class ComWorkbookService:
         except ValueError as e:
             return f"Error: Invalid cell range: {e}"
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -1565,7 +1566,7 @@ class ComWorkbookService:
         data: List[List[Any]],
         start_cell: str,
     ) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
 
@@ -1628,6 +1629,7 @@ class ComWorkbookService:
             except OSError as exc:
                 return f"Error: {exc}"
 
+        wb = None
         try:
             wb = xl.Workbooks.Add()
             if path.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
@@ -1635,6 +1637,11 @@ class ComWorkbookService:
             else:
                 wb.SaveAs(path)
         except Exception as exc:
+            if wb is not None:
+                try:
+                    wb.Close(SaveChanges=False)
+                except Exception:
+                    pass
             return f"Error: {exc}"
 
         return f"Created workbook at {filepath}"
@@ -1651,7 +1658,7 @@ class ComWorkbookService:
 
     @staticmethod
     def _create_worksheet_com(filepath: str, sheet_name: str) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
 
@@ -1738,7 +1745,7 @@ class ComWorkbookService:
         table_name: Optional[str],
         table_style: str,
     ) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -1776,7 +1783,7 @@ class ComWorkbookService:
 
     @staticmethod
     def _copy_worksheet_com(filepath: str, source_sheet: str, target_sheet: str) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
 
@@ -1808,7 +1815,7 @@ class ComWorkbookService:
 
     @staticmethod
     def _delete_worksheet_com(filepath: str, sheet_name: str) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
 
@@ -1837,7 +1844,7 @@ class ComWorkbookService:
 
     @staticmethod
     def _rename_worksheet_com(filepath: str, old_name: str, new_name: str) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
 
@@ -1866,7 +1873,7 @@ class ComWorkbookService:
     def _merge_cells_com(
         filepath: str, sheet_name: str, start_cell: str, end_cell: str
     ) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -1900,7 +1907,7 @@ class ComWorkbookService:
     def _unmerge_cells_com(
         filepath: str, sheet_name: str, start_cell: str, end_cell: str
     ) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -1946,7 +1953,7 @@ class ComWorkbookService:
         target_start: str,
         target_sheet: str,
     ) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -1996,7 +2003,7 @@ class ComWorkbookService:
                 f"Error: Invalid shift direction: {shift_direction}. Must be 'up' or 'left'"
             )
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -2036,7 +2043,7 @@ class ComWorkbookService:
         if count < 1:
             return "Error: Count must be 1 or greater"
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -2074,7 +2081,7 @@ class ComWorkbookService:
         if count < 1:
             return "Error: Count must be 1 or greater"
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -2112,7 +2119,7 @@ class ComWorkbookService:
         if count < 1:
             return "Error: Count must be 1 or greater"
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -2150,7 +2157,7 @@ class ComWorkbookService:
         if count < 1:
             return "Error: Count must be 1 or greater"
 
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
@@ -2176,7 +2183,7 @@ class ComWorkbookService:
 
     @staticmethod
     def _save_workbook_com(filepath: str) -> str:
-        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath)
+        wb_com, err = ComWorkbookService._get_open_workbook_com(filepath, for_write=True)
         if err:
             return err
         try:
