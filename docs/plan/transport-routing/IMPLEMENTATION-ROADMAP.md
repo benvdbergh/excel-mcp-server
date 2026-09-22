@@ -2,7 +2,7 @@
 
 This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **epics and stories** under `docs/plan/transport-routing/`, aligned with `docs/architecture/target-architecture.md` and ADRs `docs/architecture/adr/`.
 
-**Status (2026-04-27):** Epics **1–9**, **Epic 11**, and **Epic 12** ([open workbook discovery](Epics/Epic-12-open-workbook-discovery-tool.md), [ADR 0009](../../architecture/adr/0009-open-workbook-discovery-tool.md)) are **delivered** in code and operator docs (package line **0.4.0**; see [`CHANGELOG.md`](../../../CHANGELOG.md)). **Epic 9** ([cloud / SharePoint workbook locators for COM](Epics/Epic-9-sharepoint-and-cloud-workbook-locators-for-com.md)) is **delivered**. **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap. **Epic 10** ([COM read-class tools and routing](Epics/Epic-10-com-read-class-tools-and-routing.md)) is **superseded** by **[Epic 11](Epics/Epic-11-com-first-session-and-lifecycle.md)** — Epic-10 and **Story-10-*** files remain **historical** (ADR 0007 opt-in / file-default reads); **current behavior** follows **[ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)** and Epic-11.
+**Status (2026-06-23):** Epics **1–9**, **Epic 11**, and **Epic 12** are **delivered** (package line **0.4.0** with discovery; see [`CHANGELOG.md`](../../../CHANGELOG.md)). **Release 0.5.0** (2026-06-23) adds **agent reliability / read fidelity** work from the [office-xlsx COM improvement backlog](https://github.com/benvdbergh/excel-mcp-server/blob/main/CHANGELOG.md#050--2026-06-23) — BEN-120 through BEN-151: ADR 0010 response envelope, `value_mode`, `export_worksheet_table`, `evaluate_range`, `metadata_mode`, SharePoint open-detection hardening, and operator docs — **not** tracked as Epic-13+ files; trace via [`CHANGELOG.md`](../../../CHANGELOG.md) and [ADR 0010](../../architecture/adr/0010-mcp-tool-response-envelope.md). **Epic 8** (governed CI/CD, PyPI **excel-com-mcp**) is **delivered**; see [Epic-8](Epics/Epic-8-governed-ci-cd-pypi-and-release-pipelines.md). Transport epics **1–7** delivered per prior roadmap. **Epic 10** ([COM read-class tools and routing](Epics/Epic-10-com-read-class-tools-and-routing.md)) is **superseded** by **[Epic 11](Epics/Epic-11-com-first-session-and-lifecycle.md)** — Epic-10 and **Story-10-*** files remain **historical** (ADR 0007 opt-in / file-default reads); **current behavior** follows **[ADR 0008](../../architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md)** and Epic-11.
 
 ## Phasing (execution order)
 
@@ -20,6 +20,23 @@ This roadmap decomposes `docs/specs/PRD-excel-mcp-transport-routing.md` into **e
 | 10 | [Epic-10](Epics/Epic-10-com-read-class-tools-and-routing.md) | *(Historical — superseded by Epic-11; ADR 0007-era opt-in COM reads.)* |
 | 11 | [Epic-11](Epics/Epic-11-com-first-session-and-lifecycle.md) | COM-first default routing, COM read parity, remove `save_after_write`, lifecycle tools, docs/tests *(delivered; **0.3.0**)* |
 | 12 | [Epic-12](Epics/Epic-12-open-workbook-discovery-tool.md) | Open workbook discovery MCP tool **`excel_list_open_workbooks`**, ADR 0009 *(delivered; **0.4.0**)* |
+| — | *(post-Epic-12 / 0.5.0)* | Agent reliability & read fidelity: ADR 0010 envelope, `value_mode`, bulk export, recalc, compact reads, discovery `detail` — see [`CHANGELOG.md`](../../../CHANGELOG.md#050--2026-06-23) |
+
+## Post-Epic-12: 0.5.0 agent reliability (delivered)
+
+**Shipped in** **`0.5.0`** (2026-06-23). Traces to the [office-xlsx COM improvement backlog](https://github.com/benvdbergh/excel-mcp-server) (BEN-120–BEN-151) and [ADR 0010](../../architecture/adr/0010-mcp-tool-response-envelope.md).
+
+| Theme | Delivered capability |
+|-------|---------------------|
+| Routing observability | Opt-in `include_routing_metadata` + `_meta` envelope on `read_data_from_excel` |
+| Read fidelity | `value_mode` (`value` \| `text`); COM `Range.Text`; `metadata_mode` (`full` \| `compact`) |
+| Bulk reads | `export_worksheet_table` with `max_rows` / `truncated` |
+| COM session context | `excel_list_open_workbooks(detail=active_context)` — active workbook, sheet, selection |
+| Recalc | `evaluate_range` (COM-only) |
+| Hardening | SharePoint `FullName` open-detection alignment; wider COM Value2 fallback sampling |
+| Operator | `docs/operator/mcp-server-ids.md`, README install matrix, TOOLS.md troubleshooting |
+
+**Intentionally deferred (backlog P2 / future):** `value_mode=formula`, `text_and_value`, dedicated `read_formatted_range` tool (use `value_mode=text`), `include_routing_metadata` on all routed tools (ADR 0010 rollout starts with reads).
 
 ## Epic-12: Open workbook discovery (delivered)
 
@@ -113,6 +130,7 @@ flowchart TD
 | COM read-class tools (historical opt-in draft) | `docs/architecture/adr/0007-com-read-class-tools-routing.md`, `docs/architecture/com-read-class-tools-design.md` |
 | **COM-first default, lifecycle tools, remove `save_after_write` (current)** | **`docs/architecture/adr/0008-com-first-default-and-file-lifecycle-tools.md`**, **`docs/architecture/com-first-workbook-session-design.md`** |
 | **Open workbook discovery (enumerate host Workbooks)** | **`docs/architecture/adr/0009-open-workbook-discovery-tool.md`** |
+| **MCP response envelope (`_meta`, warnings, opt-in)** | **`docs/architecture/adr/0010-mcp-tool-response-envelope.md`** |
 
 ## Validate planning artifacts
 

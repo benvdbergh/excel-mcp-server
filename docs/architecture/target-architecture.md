@@ -24,7 +24,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 ┌─────────────────────────────────────────────────────────────┐
 │  MCP tool handlers (server.py)                               │
 │  - Parse args: filepath, optional workbook_transport,       │
-│    save_after_write                                         │
+│    include_routing_metadata (reads), value_mode, etc.       │
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
@@ -93,7 +93,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 - Implements the **same method surface** as `FileWorkbookService` for **routed** operations agreed in the tool inventory.
 - **Phased parity:** high-value writes first (`write_data`, `apply_formula`, simple formatting); charts last or tool-forced file until COM chart adapter exists (ADR 0004).
-- **`save_after_write`:** default false at host; persist only when true (FR-8).
+- **`save_after_write`:** **Removed** (ADR 0008 / 0.3.0). Persist with explicit **`save_workbook`** only.
 
 ### 7. COM execution model
 

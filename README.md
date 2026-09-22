@@ -65,6 +65,10 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 
 **Epic 12 / ADR 0009** (release **0.4.0**): **`excel_list_open_workbooks`** lists workbooks open in Excel and returns exact **`full_name`** locators for **`get_workbook_metadata`**, reads, and writes (replaces ad-hoc VBA/Immediate discovery). COM-only; see [`TOOLS.md`](TOOLS.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
+### Upgrading from 0.4.x
+
+**Release 0.5.0** (agent reliability / read fidelity): optional **`include_routing_metadata`** on **`read_data_from_excel`** wraps successes in an ADR 0010 envelope (`result`, `_meta`, `warnings`) — default **`false`** preserves legacy JSON parsers. New parameters: **`value_mode`** (`value` \| `text`), **`metadata_mode`** (`full` \| `compact`). New tools: **`export_worksheet_table`**, **`evaluate_range`**. **`excel_list_open_workbooks(detail=active_context)`** returns active workbook, sheet, and selection. Removed unused **`preview_only`** from read tools (breaking if clients still pass it). See [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), [ADR 0010](docs/architecture/adr/0010-mcp-tool-response-envelope.md).
+
 ---
 
 ## Usage

@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-12
 title: Open workbook discovery MCP tool (ADR 0009)
-status: draft
+status: done
 depends_on:
   - EPIC-11
 traces_to:
@@ -20,7 +20,7 @@ acceptance_criteria:
   - Automated tests cover enumeration logic where feasible (mocked COM); Linux CI remains green; Windows manual confirmation documented.
   - README, TOOLS.md, and changelog reflect the tool name, COM-only semantics, failure modes (Excel not running), and pairing with lifecycle/read tools.
 created: "2026-04-27"
-updated: "2026-04-27"
+updated: "2026-06-23"
 ---
 
 # Epic-12: Open workbook discovery MCP tool

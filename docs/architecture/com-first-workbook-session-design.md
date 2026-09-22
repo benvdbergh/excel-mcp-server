@@ -41,7 +41,7 @@ Operators and agents need **`Workbook.FullName`** strings—especially **`https:
 - **Minimum payload per workbook:** **`FullName`** (exact COM identity), **`Name`**, and whether the workbook **is active**.
 - **Usage pattern:** **discover → choose locator → call** existing filepath-based tools (`get_workbook_metadata`, reads, writes, lifecycle) with that string.
 
-Optional **`detail`** knobs (e.g. sheet names only) may ship with the discovery tool implementation but remain distinct from **`get_workbook_metadata`** semantics.
+Optional **`detail`** on **`excel_list_open_workbooks`**: **`minimal`** (default) or **`active_context`** (active workbook, sheet, selection per BEN-140 / 0.5.0). Remains distinct from **`get_workbook_metadata`** semantics.
 
 ---
 

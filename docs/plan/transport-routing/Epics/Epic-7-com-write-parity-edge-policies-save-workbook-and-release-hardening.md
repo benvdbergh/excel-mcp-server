@@ -2,7 +2,7 @@
 kind: epic
 id: EPIC-7
 title: COM write parity, edge policies, save_workbook, and release hardening
-status: draft
+status: done
 depends_on:
   - EPIC-6
 traces_to:
