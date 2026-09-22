@@ -28,11 +28,13 @@ def _count_workbook_matches_worker(resolved_path: str) -> int:
 
 
 class ComWorkbookOpenInExcel:
-    """True when exactly one normal (non–Protected View) window holds ``resolved_path``.
+    """True when at least one normal (non–Protected View) window holds ``resolved_path``.
 
-    Protected View workbooks are not counted here so ``auto`` does not route
-    mutations to COM until the user clicks **Enable Editing** (then the workbook
-    appears in ``Workbooks`` and matches).
+    Duplicate FullName matches still count as open so ``auto`` routes to COM,
+    which fail-closes via ``_ERR_COM_MULTIPLE_MATCH``. Protected View workbooks
+    are not counted here so ``auto`` does not route mutations to COM until the
+    user clicks **Enable Editing** (then the workbook appears in ``Workbooks``
+    and matches).
     """
 
     def __init__(self, executor: ComThreadExecutor) -> None:
@@ -40,7 +42,7 @@ class ComWorkbookOpenInExcel:
 
     def is_workbook_open_in_excel(self, resolved_path: str) -> bool:
         count = self._executor.submit(_count_workbook_matches_worker, resolved_path)
-        return count == 1
+        return count >= 1
 
 
 __all__ = ["ComWorkbookOpenInExcel"]

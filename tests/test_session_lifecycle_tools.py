@@ -99,3 +99,23 @@ def test_create_workbook_open_in_excel_notes_when_com_unavailable(
     out = srv.create_workbook(path, workbook_transport="file", open_in_excel=True)
     assert p.is_file()
     assert "open_in_excel" in out.lower() or "ignored" in out.lower()
+
+
+def test_create_workbook_open_in_excel_error_starts_with_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import excel_mcp.server as srv
+
+    p = tmp_path / "created.xlsx"
+    path = str(p.resolve())
+
+    class _StubCom:
+        def open_workbook_in_excel(self, filepath):
+            del filepath
+            return "Error: boom"
+
+    monkeypatch.setitem(srv.__dict__, "_COM_WORKBOOK_SERVICE", _StubCom())
+    out = srv.create_workbook(path, workbook_transport="file", open_in_excel=True)
+    assert p.is_file()
+    assert out.lstrip().lower().startswith("error:")
+    assert "boom" in out

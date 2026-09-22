@@ -206,8 +206,7 @@ def read_excel_range(
                 # Handle empty sheet
                 end_row, end_col = start_row, start_col
             else:
-                # Use the sheet's own boundaries
-                start_row, start_col = ws.min_row, ws.min_column
+                # Use the sheet's own boundaries, but respect the provided start_cell
                 end_row, end_col = ws.max_row, ws.max_column
 
         # Validate range bounds

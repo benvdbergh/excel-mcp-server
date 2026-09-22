@@ -238,11 +238,11 @@ def _filter_data(data: list[dict], row_filters: dict, col_filters: dict) -> list
     for record in data:
         matches = True
         for field, value in row_filters.items():
-            if record.get(field) != value:
+            if str(record.get(field, "")) != str(value):
                 matches = False
                 break
         for field, value in col_filters.items():
-            if record.get(field) != value:
+            if str(record.get(field, "")) != str(value):
                 matches = False
                 break
         if matches:

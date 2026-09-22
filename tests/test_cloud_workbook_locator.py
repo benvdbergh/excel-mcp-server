@@ -239,3 +239,33 @@ def test_dispatch_auto_closed_workbook_cloud_returns_error_not_callable() -> Non
     assert not called
     assert backend == "file"
     assert out.startswith("Error: ")
+
+
+def test_parse_collapses_parent_segment() -> None:
+    escaped = "https://tenant.sharepoint.com/sites/Allowed/../Secret/book.xlsx"
+    can = parse_cloud_workbook_locator(escaped)
+    assert can == "https://tenant.sharepoint.com/sites/Secret/book.xlsx"
+
+
+def test_url_prefix_rejects_parent_escape(monkeypatch: pytest.MonkeyPatch) -> None:
+    prefix = "https://tenant.sharepoint.com/sites/Allowed/"
+    monkeypatch.setenv("EXCEL_MCP_ALLOWED_PATHS", os.getcwd())
+    monkeypatch.setenv("EXCEL_MCP_ALLOWED_URL_PREFIXES", prefix)
+    server.EXCEL_FILES_PATH = None
+    escaped = "https://tenant.sharepoint.com/sites/Allowed/../Secret/book.xlsx"
+    encoded = "https://tenant.sharepoint.com/sites/Allowed/%2e%2e/Secret/book.xlsx"
+    slash_encoded = "https://tenant.sharepoint.com/sites/Allowed%2f..%2fSecret/book.xlsx"
+    inside = "https://tenant.sharepoint.com/sites/Allowed/foo/../book.xlsx"
+    try:
+        with pytest.raises(ValueError, match="not under any prefix"):
+            server.get_excel_path(escaped)
+        with pytest.raises(ValueError, match="not under any prefix"):
+            server.get_excel_path(encoded)
+        with pytest.raises(ValueError, match="not under any prefix"):
+            server.get_excel_path(slash_encoded)
+        out = server.get_excel_path(inside)
+        assert out == parse_cloud_workbook_locator(
+            "https://tenant.sharepoint.com/sites/Allowed/book.xlsx"
+        )
+    finally:
+        server.EXCEL_FILES_PATH = None

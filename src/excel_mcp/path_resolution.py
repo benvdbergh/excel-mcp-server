@@ -44,6 +44,7 @@ Interaction with ``get_excel_path`` (stdio vs SSE)
 from __future__ import annotations
 
 import os
+import posixpath
 import re
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
@@ -103,9 +104,23 @@ def parse_cloud_workbook_locator(locator: str) -> str:
         if not path_decoded.startswith("/"):
             path_decoded = "/" + path_decoded
         # Slash consistency + percent-encoding for non-ASCII / spaces.
+        # Collapse . / .. after decode so allowlist prefix checks cannot
+        # be escaped (posixpath keeps forward slashes on Windows).
+        path_decoded = _collapse_url_path(path_decoded)
         norm_path = quote(path_decoded, safe="/")
 
     return urlunparse(("https", netloc, norm_path, parsed.params, parsed.query, parsed.fragment))
+
+
+def _collapse_url_path(path: str) -> str:
+    """Collapse ``.`` / ``..`` in a URL path without introducing backslashes."""
+    had_trailing = path.endswith("/") and path != "/"
+    collapsed = posixpath.normpath(path if path.startswith("/") else "/" + path)
+    if not collapsed.startswith("/"):
+        collapsed = "/" + collapsed
+    if had_trailing and collapsed != "/":
+        collapsed += "/"
+    return collapsed
 
 
 def _norm_disk_path_for_com(path: str) -> str:

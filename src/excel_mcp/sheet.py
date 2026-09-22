@@ -312,6 +312,50 @@ def copy_range_operation(
         logger.error(f"Failed to copy range: {e}")
         raise SheetError(f"Failed to copy range: {str(e)}")
 
+def _copy_cell(source, target) -> None:
+    target.value = source.value
+    if source.has_style:
+        target._style = copy(source._style)
+    else:
+        target.number_format = source.number_format
+
+
+def _shift_cells_after_delete(
+    worksheet: Worksheet,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+    shift_direction: str,
+) -> None:
+    last_row = worksheet.max_row
+    last_col = worksheet.max_column
+    if shift_direction == "up":
+        n = end_row - start_row + 1
+        for col in range(start_col, end_col + 1):
+            for row in range(start_row, last_row - n + 1):
+                _copy_cell(worksheet.cell(row=row + n, column=col), worksheet.cell(row=row, column=col))
+        tail_start = max(start_row, last_row - n + 1)
+        if tail_start <= last_row:
+            delete_range(
+                worksheet,
+                f"{get_column_letter(start_col)}{tail_start}",
+                f"{get_column_letter(end_col)}{last_row}",
+            )
+        return
+    n = end_col - start_col + 1
+    for row in range(start_row, end_row + 1):
+        for col in range(start_col, last_col - n + 1):
+            _copy_cell(worksheet.cell(row=row, column=col + n), worksheet.cell(row=row, column=col))
+    tail_start = max(start_col, last_col - n + 1)
+    if tail_start <= last_col:
+        delete_range(
+            worksheet,
+            f"{get_column_letter(tail_start)}{start_row}",
+            f"{get_column_letter(last_col)}{end_row}",
+        )
+
+
 def delete_range_operation(
     filepath: str,
     sheet_name: str,
@@ -346,15 +390,15 @@ def delete_range_operation(
             end_row or start_row,
             end_col or start_col
         )
-        
-        # Delete range contents
-        delete_range(worksheet, start_cell, end_cell)
-        
-        # Shift cells if needed
-        if shift_direction == "up":
-            worksheet.delete_rows(start_row, (end_row or start_row) - start_row + 1)
-        elif shift_direction == "left":
-            worksheet.delete_cols(start_col, (end_col or start_col) - start_col + 1)
+
+        _shift_cells_after_delete(
+            worksheet,
+            start_row,
+            start_col,
+            end_row or start_row,
+            end_col or start_col,
+            shift_direction,
+        )
             
         wb.save(filepath)
         
