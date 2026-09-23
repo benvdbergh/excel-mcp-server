@@ -12,7 +12,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.chart import create_chart_in_sheet  # noqa: E402
+from excel_mcp.fileio.chart import create_chart_in_sheet  # noqa: E402
 
 
 def _book_with_data(tmp_path):

@@ -82,7 +82,7 @@ def test_read_data_from_excel_xlsm_formula_warning_in_envelope(tmp_path: Path) -
     path = str(p.resolve())
 
     from excel_mcp import server as srv
-    from excel_mcp.routing.routed_dispatch import (
+    from excel_mcp.value_mode import (
         FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
     )
 

@@ -13,11 +13,11 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 import excel_mcp.server as server  # noqa: E402
-from excel_mcp.path_policy import (  # noqa: E402
+from excel_mcp.path.policy import (  # noqa: E402
     assert_cloud_workbook_url_allowlist,
     cloud_workbook_url_allowed_by_prefix_list,
 )
-from excel_mcp.path_resolution import (  # noqa: E402
+from excel_mcp.path.resolution import (  # noqa: E402
     is_cloud_workbook_locator,
     normalize_workbook_target_for_com,
     parse_cloud_workbook_locator,

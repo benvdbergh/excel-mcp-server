@@ -9,8 +9,8 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 import excel_mcp.server as server  # noqa: E402
-from excel_mcp.path_policy import path_is_allowed  # noqa: E402
-from excel_mcp.path_resolution import resolve_target  # noqa: E402
+from excel_mcp.path.policy import path_is_allowed  # noqa: E402
+from excel_mcp.path.resolution import resolve_target  # noqa: E402
 
 
 class TestPathAllowlist(unittest.TestCase):

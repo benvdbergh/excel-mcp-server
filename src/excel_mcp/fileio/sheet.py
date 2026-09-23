@@ -7,8 +7,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.styles import Font, Border, PatternFill, Side
 
-from .cell_utils import parse_cell_range
-from .exceptions import SheetError, ValidationError
+from excel_mcp.cells import parse_cell_range
+from excel_mcp.exceptions import SheetError, ValidationError
 
 logger = logging.getLogger(__name__)
 

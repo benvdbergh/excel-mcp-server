@@ -1,10 +1,10 @@
 from typing import Any
 import logging
 
-from .workbook import get_or_create_workbook
-from .cell_utils import validate_cell_reference
-from .exceptions import ValidationError, CalculationError
-from .validation import validate_formula
+from excel_mcp.cells import validate_cell_reference
+from excel_mcp.exceptions import ValidationError, CalculationError
+from excel_mcp.formula_syntax import validate_formula
+from excel_mcp.fileio.workbook import get_or_create_workbook
 
 logger = logging.getLogger(__name__)
 

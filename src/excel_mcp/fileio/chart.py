@@ -11,8 +11,8 @@ from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.legend import Legend
 from openpyxl.chart.axis import ChartLines
 
-from .cell_utils import parse_cell_range
-from .exceptions import ValidationError, ChartError
+from excel_mcp.cells import parse_cell_range
+from excel_mcp.exceptions import ValidationError, ChartError
 
 logger = logging.getLogger(__name__)
 

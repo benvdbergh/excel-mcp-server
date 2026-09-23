@@ -10,9 +10,9 @@ from openpyxl.formatting.rule import (
     FormulaRule, CellIsRule
 )
 
-from .workbook import get_or_create_workbook
-from .cell_utils import parse_cell_range, validate_cell_reference
-from .exceptions import ValidationError, FormattingError
+from excel_mcp.cells import parse_cell_range, validate_cell_reference
+from excel_mcp.exceptions import ValidationError, FormattingError
+from excel_mcp.fileio.workbook import get_or_create_workbook
 
 logger = logging.getLogger(__name__)
 

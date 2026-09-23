@@ -8,7 +8,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.path_resolution import resolve_target  # noqa: E402
+from excel_mcp.path.resolution import resolve_target  # noqa: E402
 
 
 class TestResolveTarget(unittest.TestCase):

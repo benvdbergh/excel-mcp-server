@@ -1,7 +1,7 @@
 """Port for detecting whether a workbook path is open in Excel (FR-2).
 
 When the COM stack is available, :mod:`excel_mcp.server` wires
-:class:`excel_mcp.routing.com_workbook_open_detection.ComWorkbookOpenInExcel`
+:class:`excel_mcp.com.open_detection.ComWorkbookOpenInExcel`
 (executor-backed enumeration). Otherwise :class:`StubWorkbookOpenInExcel` is used;
 it never starts Excel (FR-10).
 """

@@ -15,7 +15,8 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.routing import ComWorkbookService, RoutingBackend, StubWorkbookOpenInExcel  # noqa: E402
+from excel_mcp.com.service import ComWorkbookService  # noqa: E402
+from excel_mcp.routing import RoutingBackend, StubWorkbookOpenInExcel  # noqa: E402
 from excel_mcp.routing.tool_inventory import (  # noqa: E402
     MCP_TOOL_INVENTORY,
     ToolKind,
@@ -36,31 +37,36 @@ def _read_mcp_tool_names() -> set[str]:
 
 
 def test_workbook_dispatch_read_tools_include_com_do_op_keyword() -> None:
-    """Contract: every ToolKind.READ _workbook_dispatch call passes com_do_op=."""
-    server_path = (
-        Path(__file__).resolve().parent.parent
-        / "src"
-        / "excel_mcp"
-        / "server.py"
+    """Contract: every ToolKind.READ workbook_dispatch call passes com_do_op=."""
+    tools_dir = (
+        Path(__file__).resolve().parent.parent / "src" / "excel_mcp" / "tools"
     )
-    tree = ast.parse(server_path.read_text(encoding="utf-8"))
+    trees = [
+        ast.parse(p.read_text(encoding="utf-8"))
+        for p in sorted(tools_dir.glob("*.py"))
+        if p.name != "__init__.py"
+    ]
     read_names = _read_mcp_tool_names()
     missing: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Name) or node.func.id != "_workbook_dispatch":
-            continue
-        if not node.args:
-            continue
-        first = node.args[0]
-        if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
-            continue
-        if first.value not in read_names:
-            continue
-        kw = {k.arg for k in node.keywords if k.arg is not None}
-        if "com_do_op" not in kw:
-            missing.append(first.value)
+    for tree in trees:
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if (
+                not isinstance(node.func, ast.Name)
+                or node.func.id != "workbook_dispatch"
+            ):
+                continue
+            if not node.args:
+                continue
+            first = node.args[0]
+            if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+                continue
+            if first.value not in read_names:
+                continue
+            kw = {k.arg for k in node.keywords if k.arg is not None}
+            if "com_do_op" not in kw:
+                missing.append(first.value)
     assert not missing, f"READ tools missing com_do_op keyword: {sorted(missing)}"
 
 

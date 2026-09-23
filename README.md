@@ -55,6 +55,7 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 | **`manifest.json`** | MCP catalog metadata; `mcp_config` for pinned PyPI/registry (`uvx excel-com-mcp==X.Y.Z stdio`); local fork uses [`.cursor/mcp.json`](.cursor/mcp.json) (see [Install decision matrix](#install-decision-matrix)) |
 | **[`.cursor/mcp.json`](.cursor/mcp.json)** | **Local-clone SSOT:** `excel-local` server with `${workspaceFolder}`, Windows COM extra, and operator env (see [MCP server ids](docs/operator/mcp-server-ids.md) and [Local clone in Cursor](#local-clone-in-cursor-this-repo)) |
 | **[`CHANGELOG.md`](CHANGELOG.md)** | Version-to-version release notes and breaking changes |
+| **[`docs/README.md`](docs/README.md)** | Map of architecture, specs, operator notes, and the delivery plan |
 | **[`docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md`](docs/plan/transport-routing/IMPLEMENTATION-ROADMAP.md)** | Epic/story delivery status for workbook routing |
 
 ### Upgrading from 0.2.x

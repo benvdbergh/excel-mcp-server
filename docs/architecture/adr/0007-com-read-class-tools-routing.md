@@ -9,14 +9,14 @@ Superseded by [ADR 0008 — COM-first default and file lifecycle tools](0008-com
 [ADR 0003](0003-read-path-com-parity.md) accepted **file-backed reads** for all read-class tools, with an optional later phase for **COM-based reads**. The codebase reflects that decision:
 
 - [`RoutingBackend.resolve_workbook_backend`](../../../src/excel_mcp/routing/routing_backend.py) returns **`backend="file"`** with reason **`read_class_file_backed`** for every `ToolKind.READ` invocation, regardless of `workbook_transport`.
-- MCP handlers for read tools do not pass **`com_do_op`** into [`_workbook_dispatch`](../../../src/excel_mcp/server.py); [`ComWorkbookService`](../../../src/excel_mcp/routing/com_workbook_service.py) **read** methods are **stubs**.
+- MCP handlers for read tools do not pass **`com_do_op`** into [`_workbook_dispatch`](../../../src/excel_mcp/server.py); [`ComWorkbookService`](../../../src/excel_mcp/com/service.py) **read** methods are **stubs**.
 
 Operators increasingly need:
 
 1. **Cloud workbook locators** ([ADR 0006](0006-cloud-workbook-locator-sharepoint-urls.md)): HTTPS `filepath` values cannot use the openpyxl backend; **COM reads** are the practical way to read data when Excel hosts the workbook.
 2. **Consistency with the live grid** when the workbook is open in Excel: file reads may **diverge** from on-screen state until **`save_workbook`** is used.
 
-The design note [COM read-class tools: design note](../com-read-class-tools-design.md) analyzes routing options, `ComWorkbookService` parity with [`FileWorkbookService`](../../../src/excel_mcp/routing/file_workbook_service.py), risks, and backward compatibility.
+The design note [COM read-class tools: design note](../com-read-class-tools-design.md) analyzes routing options, `ComWorkbookService` parity with [`FileWorkbookService`](../../../src/excel_mcp/fileio/service.py), risks, and backward compatibility.
 
 ## Decision (historical — superseded)
 

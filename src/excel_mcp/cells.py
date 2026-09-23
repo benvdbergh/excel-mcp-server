@@ -1,6 +1,17 @@
 import re
 
-from openpyxl.utils import column_index_from_string
+
+def _column_index_from_string(col: str) -> int:
+    """Convert Excel column letters to a 1-based index (``A`` → 1, ``AA`` → 27)."""
+    idx = 0
+    for c in col.upper():
+        if not ("A" <= c <= "Z"):
+            raise ValueError(f"Invalid column letters: {col!r}")
+        idx = idx * 26 + (ord(c) - ord("A") + 1)
+    if idx < 1:
+        raise ValueError(f"Invalid column letters: {col!r}")
+    return idx
+
 
 def parse_cell_range(
     cell_ref: str,
@@ -19,7 +30,7 @@ def parse_cell_range(
         raise ValueError(f"Invalid cell reference: {start_cell}")
     col_str, row_str = match.groups()
     start_row = int(row_str)
-    start_col = column_index_from_string(col_str)
+    start_col = _column_index_from_string(col_str)
 
     if end_cell:
         match = re.match(r"([A-Z]+)([0-9]+)", end_cell.upper())
@@ -27,7 +38,7 @@ def parse_cell_range(
             raise ValueError(f"Invalid cell reference: {end_cell}")
         col_str, row_str = match.groups()
         end_row = int(row_str)
-        end_col = column_index_from_string(col_str)
+        end_col = _column_index_from_string(col_str)
     else:
         end_row = None
         end_col = None
@@ -51,4 +62,4 @@ def validate_cell_reference(cell_ref: str) -> bool:
         else:
             return False
 
-    return bool(col and row) 
+    return bool(col and row)

@@ -75,15 +75,20 @@ def _is_mcp_tool_decorator(node: ast.AST) -> bool:
 
 
 def _mcp_tool_names_from_server() -> frozenset[str]:
-    path = os.path.join(_SRC, "excel_mcp", "server.py")
-    with open(path, encoding="utf-8") as fh:
-        tree = ast.parse(fh.read(), filename=path)
+    """Collect MCP tool names from tools/ registrar modules (nested @mcp.tool defs)."""
+    tools_dir = os.path.join(_SRC, "excel_mcp", "tools")
     names: list[str] = []
-    for node in tree.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for filename in sorted(os.listdir(tools_dir)):
+        if not filename.endswith(".py") or filename == "__init__.py":
             continue
-        if any(_is_mcp_tool_decorator(dec) for dec in node.decorator_list):
-            names.append(node.name)
+        path = os.path.join(tools_dir, filename)
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if any(_is_mcp_tool_decorator(dec) for dec in node.decorator_list):
+                names.append(node.name)
     return frozenset(names)
 
 

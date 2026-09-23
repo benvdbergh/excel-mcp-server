@@ -12,7 +12,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.data import read_excel_range  # noqa: E402
+from excel_mcp.fileio.data import read_excel_range  # noqa: E402
 
 
 def test_read_excel_range_from_c5_excludes_a1(tmp_path) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from excel_mcp import com_support
+from excel_mcp.com import support as com_support
 
 
 def test_com_support_module_imports_without_error():

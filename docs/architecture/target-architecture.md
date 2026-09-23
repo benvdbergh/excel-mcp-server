@@ -1,6 +1,6 @@
-# Target architecture (post-routing / PRD-aligned)
+# Target architecture (current)
 
-This document describes the **to-be** architecture for implementing `docs/specs/PRD-excel-mcp-transport-routing.md`: routing each workbook operation to **file-based I/O** (openpyxl, current behavior) or **COM-based automation** (Excel host on Windows) when the workbook is detected as open in Excel, with explicit modes and observability.
+This document describes the workbook transport architecture: each operation routes to **file I/O** (openpyxl) or **COM automation** (Excel on Windows) when the workbook is open in Excel, with explicit modes and observability. Requirements remain in `docs/specs/PRD-excel-mcp-transport-routing.md`. The package tree below is the current source layout.
 
 ## Goals (traceability)
 
@@ -12,7 +12,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 | FR-2               | `workbook_open_in_excel(resolved_path)` on Windows; injectable for tests                                    |
 | FR-4 / FR-5        | `FileWorkbookService` and `ComWorkbookService` implement the **same operation-oriented contract**           |
 | FR-6               | COM calls serialized on a **single dedicated thread** (queue + worker or equivalent)                        |
-| FR-7 / FR-8        | Optional tool params: workbook transport override, `save_after_write`; COM default no save until requested  |
+| FR-7 / FR-8        | Optional `workbook_transport` override; persistence is explicit `save_workbook` (`save_after_write` removed, ADR 0008) |
 | FR-10              | Do not start Excel for routing by default                                                                   |
 | FR-11              | Allowlist / workspace roots apply to **both** file and COM targets                                          |
 | FR-12              | Non-Windows: COM module absent; `com` mode → clear unsupported error; `auto` → file                         |
@@ -26,7 +26,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  MCP tool handlers (server.py)                              │
+│  MCP tools (tools/) wired by server.py                      │
 │  - Parse args: filepath, optional workbook_transport,       │
 │    include_routing_metadata (reads), value_mode, etc.       │
 └───────────────────────────┬─────────────────────────────────┘
@@ -47,12 +47,31 @@ This document describes the **to-be** architecture for implementing `docs/specs/
             │                             │
 ┌───────────▼───────────────┐   ┌─────────▼────────────────────┐
 │  FileWorkbookService      │   │  ComWorkbookService          │
-│  Delegates to existing    │   │  xlwings or pywin32 (ADR)    │
-│  workbook/sheet/data/…    │   │  All calls via COM executor  │
+│  fileio/ — openpyxl       │   │  com/ — pywin32 via executor │
+│  modules                  │   │                              │
 └───────────────────────────┘   └──────────────────────────────┘
 ```
 
+## Package layout
 
+Ports and adapters as Python modules with `typing.Protocol` and a composition root — no DI container. `FileWorkbookService` (`fileio/service.py`) and `ComWorkbookService` (`com/service.py`) implement the same workbook-operation Protocol and are constructed only in `server.py`.
+
+```text
+src/excel_mcp/
+  server.py              # Composition root: wire FastMCP, services, routing
+  tools/                 # MCP tool registration (handlers)
+  routing/               # RoutingBackend, contracts, dispatch (no fileio/com)
+  fileio/                # File/openpyxl adapter (FileWorkbookService)
+  com/                   # COM/Excel adapter (ComWorkbookService)
+  query/                 # Shared table/row query helpers (adapter-agnostic)
+  path/                  # path/resolution.py, path/policy.py (__init__ empty)
+  cells.py               # Cell reference helpers (no openpyxl)
+  value_mode.py          # Read value-mode helpers
+  formula_syntax.py      # Pure formula syntax validation
+  exceptions.py          # Shared domain exceptions
+```
+
+**Forbidden imports** (enforced by `tests/test_import_direction.py`): `query` must not import `fileio`, `com`, `routing`, or `server`; `fileio` must not import `routing`, `com`, or `server`; `com` must not import `fileio` or `server`; `routing` must not import `fileio` or `com`. Shared modules both adapters may import include `query`, `value_mode`, `formula_syntax`, `cells`, `path`, and `exceptions`.
 
 ## Naming: workbook transport vs wire transport
 
@@ -159,6 +178,7 @@ This document describes the **to-be** architecture for implementing `docs/specs/
 3. Add `RoutingBackend` with file-only implementation and mocked `workbook_open_in_excel`. **(Done — Epic 4.)**
 4. Extend tool schemas + env vars; document matrix in README. **(Done — Epic 5.)**
 5. Add `ComWorkbookService` behind `[com]` and thread executor; expand operation coverage. **(Epic 6 delivered — skeleton + executor + packaging; Epic 7 — broaden COM write parity and release hardening.)**
+6. Split the flat package into `tools/`, `routing/`, `fileio/`, `com/`, `query/`, and `path/`, with import direction checked by `tests/test_import_direction.py`. **(Done.)**
 
 
 

@@ -1,6 +1,6 @@
 """File-backed workbook façade implementing ``RoutedWorkbookOperations`` (Epic 3).
 
-Delegates to the same ``excel_mcp.*`` entry points as ``excel_mcp.server`` handlers
+Delegates to the same ``excel_mcp.fileio.*`` entry points as ``excel_mcp.server`` handlers
 so routed calls preserve return shapes and error handling.
 
 Debt (workbook lifecycle outside this façade): ``data.py``, ``sheet.py``,
@@ -15,12 +15,6 @@ import json
 import logging
 from typing import Any, Dict, List, Mapping, Optional
 
-from openpyxl import load_workbook
-
-from excel_mcp.calculations import apply_formula as apply_formula_impl
-from excel_mcp.cell_validation import get_all_validation_ranges
-from excel_mcp.chart import create_chart_in_sheet as create_chart_impl
-from excel_mcp.data import export_excel_worksheet_table, read_excel_range_with_metadata, write_data
 from excel_mcp.exceptions import (
     CalculationError,
     ChartError,
@@ -31,9 +25,12 @@ from excel_mcp.exceptions import (
     ValidationError,
     WorkbookError,
 )
-from excel_mcp.formatting import format_range as format_range_func
-from excel_mcp.pivot import create_pivot_table as create_pivot_table_impl
-from excel_mcp.sheet import (
+from excel_mcp.fileio.calculations import apply_formula as apply_formula_impl
+from excel_mcp.fileio.chart import create_chart_in_sheet as create_chart_impl
+from excel_mcp.fileio.data import export_excel_worksheet_table, read_excel_range_with_metadata, write_data
+from excel_mcp.fileio.formatting import format_range as format_range_func
+from excel_mcp.fileio.pivot import create_pivot_table as create_pivot_table_impl
+from excel_mcp.fileio.sheet import (
     copy_range_operation,
     copy_sheet,
     delete_cols,
@@ -47,20 +44,21 @@ from excel_mcp.sheet import (
     rename_sheet,
     unmerge_range,
 )
-from excel_mcp.tables import create_excel_table as create_table_impl
-from excel_mcp.tables import list_excel_tables as list_excel_tables_impl
-from excel_mcp.tables import map_excel_sheet_layout as map_excel_sheet_layout_impl
-from excel_mcp.tables import query_excel_region as query_excel_region_impl
-from excel_mcp.tables import query_excel_table as query_excel_table_impl
-from excel_mcp.validation import (
+from excel_mcp.fileio.tables import create_excel_table as create_table_impl
+from excel_mcp.fileio.tables import list_excel_tables as list_excel_tables_impl
+from excel_mcp.fileio.tables import map_excel_sheet_layout as map_excel_sheet_layout_impl
+from excel_mcp.fileio.tables import query_excel_region as query_excel_region_impl
+from excel_mcp.fileio.tables import query_excel_table as query_excel_table_impl
+from excel_mcp.fileio.validation import (
+    read_worksheet_data_validation as read_worksheet_data_validation_impl,
     validate_formula_in_cell_operation,
     validate_range_in_sheet_operation,
 )
-from excel_mcp.workbook import create_sheet as wb_create_sheet
-from excel_mcp.workbook import create_workbook as wb_create_workbook
-from excel_mcp.workbook import get_workbook_info
-
-from excel_mcp.routing.read_value_mode import validate_metadata_mode, validate_value_mode
+from excel_mcp.fileio.workbook import create_sheet as wb_create_sheet
+from excel_mcp.fileio.workbook import create_workbook as wb_create_workbook
+from excel_mcp.fileio.workbook import get_workbook_info
+from excel_mcp.fileio.workbook import save_workbook as save_workbook_impl
+from excel_mcp.value_mode import validate_metadata_mode, validate_value_mode
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +169,8 @@ class FileWorkbookService:
         where: Optional[List[Dict[str, Any]]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        omit_empty: bool = False,
+        search: Optional[str] = None,
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
@@ -183,6 +183,8 @@ class FileWorkbookService:
                 where=where,
                 limit=limit,
                 offset=offset,
+                omit_empty=omit_empty,
+                search=search,
             )
             return json.dumps(result, indent=2, default=str)
         except DataError as e:
@@ -218,6 +220,8 @@ class FileWorkbookService:
         where: Optional[List[Dict[str, Any]]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        omit_empty: bool = False,
+        search: Optional[str] = None,
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
@@ -232,6 +236,8 @@ class FileWorkbookService:
                 where=where,
                 limit=limit,
                 offset=offset,
+                omit_empty=omit_empty,
+                search=search,
             )
             return json.dumps(result, indent=2, default=str)
         except DataError as e:
@@ -264,30 +270,7 @@ class FileWorkbookService:
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         del operation_metadata
-        wb = load_workbook(filepath, read_only=False)
-        try:
-            if sheet_name not in wb.sheetnames:
-                return f"Error: Sheet '{sheet_name}' not found"
-
-            ws = wb[sheet_name]
-            validations = get_all_validation_ranges(ws)
-
-            if not validations:
-                return "No data validation rules found in this worksheet"
-
-            return json.dumps(
-                {
-                    "sheet_name": sheet_name,
-                    "validation_rules": validations,
-                },
-                indent=2,
-                default=str,
-            )
-        except Exception as e:
-            logger.error(f"Error getting validation info: {e}")
-            raise
-        finally:
-            wb.close()
+        return read_worksheet_data_validation_impl(filepath, sheet_name)
 
     def validate_sheet_range(
         self,
@@ -807,12 +790,7 @@ class FileWorkbookService:
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
         del operation_metadata
-        wb = load_workbook(filepath)
-        try:
-            wb.save(filepath)
-        finally:
-            wb.close()
-        return f"Workbook saved: {filepath}"
+        return save_workbook_impl(filepath)
 
 
 __all__ = ["FileWorkbookService"]

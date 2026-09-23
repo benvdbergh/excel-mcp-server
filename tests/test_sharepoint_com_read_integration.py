@@ -19,9 +19,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from excel_mcp.path_resolution import parse_cloud_workbook_locator
-from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
-from excel_mcp.routing.com_workbook_service import ComWorkbookService
+from excel_mcp.path.resolution import parse_cloud_workbook_locator
+from excel_mcp.com.open_detection import ComWorkbookOpenInExcel
+from excel_mcp.com.service import ComWorkbookService
 from excel_mcp.routing.routing_backend import RoutingBackend
 
 from test_com_workbook_service import (  # noqa: E402

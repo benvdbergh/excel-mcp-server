@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from excel_mcp.path_resolution import normalize_workbook_target_for_com
-from excel_mcp.routing.com_workbook_open_detection import ComWorkbookOpenInExcel
+from excel_mcp.path.resolution import normalize_workbook_target_for_com
+from excel_mcp.com.open_detection import ComWorkbookOpenInExcel
 
 
 class ImmediateExecutor:

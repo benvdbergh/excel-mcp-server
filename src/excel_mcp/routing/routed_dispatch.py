@@ -16,7 +16,7 @@ from excel_mcp.routing.routing_backend import (
 )
 from excel_mcp.routing.routing_errors import ComExecutionNotImplementedError
 from excel_mcp.routing.tool_inventory import ToolKind
-from excel_mcp.path_resolution import is_cloud_workbook_locator
+from excel_mcp.path.resolution import is_cloud_workbook_locator
 from excel_mcp.routing.workbook_operation_contract import (
     ROUTED_WORKBOOK_OPERATION_NAMES,
     RoutedWorkbookOperations,
@@ -42,22 +42,6 @@ class RoutedDispatchMeta(TypedDict):
 class RoutedResponseWarning(TypedDict):
     code: str
     message: str
-
-
-FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE = "file_backend_formula_not_evaluated"
-FILE_BACKEND_FORMULA_NOT_EVALUATED_MESSAGE = (
-    "The file (openpyxl) backend does not evaluate Excel formulas; "
-    "cached values may be missing (null). Prefer COM routing "
-    "(workbook_transport=auto or com) when the workbook is open in Excel."
-)
-
-
-def file_backend_formula_not_evaluated_warning() -> RoutedResponseWarning:
-    """ADR 0010 warning when openpyxl reads formula cells without evaluation."""
-    return {
-        "code": FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
-        "message": FILE_BACKEND_FORMULA_NOT_EVALUATED_MESSAGE,
-    }
 
 
 def build_routed_response_envelope(
