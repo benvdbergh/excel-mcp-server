@@ -70,6 +70,10 @@ The PyPI **distribution name** is **`excel-com-mcp`** (same as `[project].name` 
 
 **Release 0.5.0** (agent reliability / read fidelity): optional **`include_routing_metadata`** on **`read_data_from_excel`** wraps successes in an ADR 0010 envelope (`result`, `_meta`, `warnings`) — default **`false`** preserves legacy JSON parsers. New parameters: **`value_mode`** (`value` \| `text`), **`metadata_mode`** (`full` \| `compact`). New tools: **`export_worksheet_table`**, **`evaluate_range`**. **`excel_list_open_workbooks(detail=active_context)`** returns active workbook, sheet, and selection. Removed unused **`preview_only`** from read tools (breaking if clients still pass it). See [`CHANGELOG.md`](CHANGELOG.md), [`TOOLS.md`](TOOLS.md), [ADR 0010](docs/architecture/adr/0010-mcp-tool-response-envelope.md).
 
+### Upgrading from 0.5.x
+
+**Release 0.6.0** adds read-only table and region query (**`list_tables`**, **`query_table`**, **`map_sheet_layout`**, **`query_region`**) and COM view tools (**`apply_table_view`**, **`clear_table_view`**). Query tools do not change filters, sort, or hidden columns. In-place views change the shared desktop workbook; snapshot mode writes a new sheet and leaves the source sheet unchanged. See [`CHANGELOG.md`](CHANGELOG.md) and [`TOOLS.md`](TOOLS.md).
+
 ---
 
 ## Usage
@@ -111,14 +115,14 @@ The server supports three transport methods:
 }
 ```
 
-For file-only PyPI use without a clone, pin an explicit version: `uvx excel-com-mcp==0.5.0 stdio`.
+For file-only PyPI use without a clone, pin an explicit version: `uvx excel-com-mcp==0.6.0 stdio`.
 
 ### 1. Stdio Transport (for local use)
 
 **PyPI (pinned, file-oriented):**
 
 ```bash
-uvx excel-com-mcp==0.5.0 stdio
+uvx excel-com-mcp==0.6.0 stdio
 ```
 
 ```json
@@ -126,7 +130,7 @@ uvx excel-com-mcp==0.5.0 stdio
    "mcpServers": {
       "excel": {
          "command": "uvx",
-         "args": ["excel-com-mcp==0.5.0", "stdio"]
+         "args": ["excel-com-mcp==0.6.0", "stdio"]
       }
    }
 }

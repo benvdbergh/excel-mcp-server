@@ -4,6 +4,40 @@ All notable changes to this project are documented in this file. The format is i
 
 ## [Unreleased]
 
+## 0.6.0 — 2026-09-23
+
+First PyPI upload since **0.4.0**. The **0.5.0** notes below ship in this upload as well.
+
+### Added
+
+- **Table catalog and row query (Epic 13):** `list_tables`, `query_table`, `map_sheet_layout`, and `query_region`. These reads do not change filter, sort, or hidden columns. `query_table` and `query_region` accept `columns`, `where`, `limit`, `offset`, `omit_empty`, and `search`, and return a `view_spec`.
+- **Excel view from a query spec (Epic 14):** COM tools `apply_table_view` and `clear_table_view`. In-place mode changes the shared desktop workbook. Snapshot mode writes values to a new sheet and leaves the source sheet's filter, order, and hidden columns unchanged. `limit`, `offset`, and cross-column OR are refused so the view matches the queried rows.
+
+### Fixed
+
+- Cloud URL path escapes no longer bypass the allowlist.
+- Duplicate open-workbook matches fail closed instead of attaching to an arbitrary workbook.
+- File and COM error responses stay aligned so a failure is not treated as success.
+
+### Internal
+
+- Split the package into `tools/`, `routing/`, `fileio/`, `com/`, `query/`, and `path/`. `tests/test_import_direction.py` checks that routing does not import the file or COM adapters.
+
+### Docs
+
+- Architecture docs describe the current package layout. `TOOLS.md` documents the query and view tools. Install pins move to `0.6.0`.
+
+### Breaking / impact notes
+
+- Existing tool names and parameters are unchanged. `apply_table_view` in-place mode is visible to everyone with the desktop workbook open; use snapshot mode on a shared file.
+- Clients still on PyPI `0.4.0` also pick up the **0.5.0** changes in this upload, including removal of `preview_only`.
+
+### Validation run
+
+- `pytest`
+- `hatch build`
+- `twine check dist/*`
+
 ## 0.5.0 — 2026-06-23
 
 Epics **1–4** (agent reliability, read fidelity, hardening, operator documentation): BEN-120 through BEN-140.
