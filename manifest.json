@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "excel-com-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Model Context Protocol server for Excel (.xlsx): openpyxl plus optional Windows COM. COM-first routing (auto/com) for reads and writes when Excel has the workbook open; file fallback or workbook_transport=file for on-disk snapshots. chart/pivot v1 file-forced (ADR 0004). Persistence: save_workbook only (no save_after_write). Discovery: excel_list_open_workbooks with detail=active_context (COM; ADR 0009). Lifecycle: excel_open_workbook, excel_close_workbook (COM). Recalc: evaluate_range (COM-only). Reads: value_mode, metadata_mode, include_routing_metadata (ADR 0010). Bulk: export_worksheet_table. filepath: absolute local path, OR (stdio, COM) same https FullName as Excel. M365 auth is via Excel. With EXCEL_MCP_ALLOWED_PATHS, https needs EXCEL_MCP_ALLOWED_URL_PREFIXES. Recommended COM/SharePoint: local fork uv run --project <repo> --extra com excel-com-mcp stdio (.cursor/mcp.json). mcp_config below is PyPI/registry default (pin uvx excel-com-mcp==X.Y.Z for casual file-only). See README install decision matrix, TOOLS.md.",
   "author": {
     "name": "haris",
@@ -20,7 +20,7 @@
     "entry_point": "src/excel_mcp/__main__.py",
     "mcp_config": {
       "command": "uvx",
-      "args": ["excel-com-mcp==0.5.0", "stdio"]
+      "args": ["excel-com-mcp==0.6.0", "stdio"]
     }
   },
   "tools": [
@@ -35,6 +35,12 @@
     {"name": "write_data_to_excel", "description": "Write data to Excel cells"},
     {"name": "read_data_from_excel", "description": "Read worksheet range as JSON with validation metadata; optional value_mode (value|text)"},
     {"name": "export_worksheet_table", "description": "Bulk export worksheet as compact table (headers + row matrix); optional max_rows cap"},
+    {"name": "list_tables", "description": "List native Excel tables (ListObjects) without cell values"},
+    {"name": "query_table", "description": "Project, filter, and page ListObject rows; returns view_spec; does not change the sheet"},
+    {"name": "map_sheet_layout", "description": "Map sheet tables and non-table regions"},
+    {"name": "query_region", "description": "Filter a non-table region with the query_table contract; returns view_spec"},
+    {"name": "apply_table_view", "description": "COM: show a viewable query in place or as a snapshot sheet"},
+    {"name": "clear_table_view", "description": "COM: restore filter, sort, and columns changed by apply_table_view"},
     {"name": "format_range", "description": "Apply formatting to cell range"},
     {"name": "merge_cells", "description": "Merge cells in a range"},
     {"name": "unmerge_cells", "description": "Unmerge previously merged cells"},
