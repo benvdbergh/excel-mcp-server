@@ -11,7 +11,8 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from excel_mcp.exceptions import DataError  # noqa: E402
-from excel_mcp.tables import (  # noqa: E402
+from excel_mcp.query import (  # noqa: E402
+    MAX_QUERY_TABLE_COLUMNS_WITH_OMIT_EMPTY,
     MAX_QUERY_TABLE_COLUMNS_WITHOUT_EXPLICIT,
     XL_FILTER_OR,
     XL_FILTER_VALUES,
@@ -127,6 +128,68 @@ def test_wide_table_requires_columns() -> None:
             rows=[{c: 1 for c in wide}],
             columns=None,
         )
+
+
+def test_omit_empty_drops_blank_projected_columns() -> None:
+    cols = ["Keep", "Blank", "Zero", "Flag"]
+    rows = [
+        {"Keep": "a", "Blank": None, "Zero": 0, "Flag": False},
+        {"Keep": "b", "Blank": "", "Zero": 0, "Flag": False},
+    ]
+    out = query_table_rows(
+        table_name="T1",
+        table_columns=cols,
+        rows=rows,
+        columns=cols,
+        omit_empty=True,
+    )
+    assert out["headers"] == ["Keep", "Zero", "Flag"]
+    assert out["rows"] == [
+        {"Keep": "a", "Zero": 0, "Flag": False},
+        {"Keep": "b", "Zero": 0, "Flag": False},
+    ]
+    assert out["view_spec"]["columns"] == ["Keep", "Zero", "Flag"]
+
+
+def test_omit_empty_allows_wide_table_without_explicit_columns() -> None:
+    wide = [f"C{i}" for i in range(MAX_QUERY_TABLE_COLUMNS_WITHOUT_EXPLICIT + 1)]
+    assert len(wide) <= MAX_QUERY_TABLE_COLUMNS_WITH_OMIT_EMPTY
+    rows = [{c: (1 if c == "C0" else None) for c in wide}]
+    out = query_table_rows(
+        table_name="Wide",
+        table_columns=wide,
+        rows=rows,
+        columns=None,
+        omit_empty=True,
+    )
+    assert out["headers"] == ["C0"]
+    assert out["rows"] == [{"C0": 1}]
+
+
+def test_search_and_where_combined() -> None:
+    cols = ["Name", "Tag", "Qty"]
+    rows = [
+        {"Name": "Alpha", "Tag": "x", "Qty": 1},
+        {"Name": "Beta", "Tag": "y", "Qty": 2},
+        {"Name": "Gamma", "Tag": "x", "Qty": 3},
+    ]
+    out = query_table_rows(
+        table_name="T1",
+        table_columns=cols,
+        rows=rows,
+        columns=["Name", "Qty"],
+        where=[{"column": "Tag", "op": "eq", "value": "x"}],
+        search="amm",
+    )
+    assert out["rows"] == [{"Name": "Gamma", "Qty": 3}]
+    # Numeric cells are not searched as strings.
+    none = query_table_rows(
+        table_name="T1",
+        table_columns=cols,
+        rows=rows,
+        search="1",
+    )
+    assert none["row_count"] == 0
 
 
 def test_unknown_column_and_invalid_op() -> None:

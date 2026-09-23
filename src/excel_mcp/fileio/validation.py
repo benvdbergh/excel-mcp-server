@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from typing import Any
@@ -6,8 +7,10 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from .cell_utils import parse_cell_range, validate_cell_reference
-from .exceptions import ValidationError
+from excel_mcp.cells import parse_cell_range, validate_cell_reference
+from excel_mcp.exceptions import ValidationError
+from excel_mcp.fileio.cell_validation import get_all_validation_ranges
+from excel_mcp.formula_syntax import validate_formula
 
 logger = logging.getLogger(__name__)
 
@@ -162,39 +165,6 @@ def validate_range_in_sheet_operation(
         logger.error(f"Failed to validate range: {e}")
         raise ValidationError(str(e))
 
-def validate_formula(formula: str) -> tuple[bool, str]:
-    """Validate Excel formula syntax and safety"""
-    if not formula.startswith("="):
-        return False, "Formula must start with '='"
-
-    # Remove the '=' prefix for validation
-    formula = formula[1:]
-
-    # Check for balanced parentheses
-    parens = 0
-    for c in formula:
-        if c == "(":
-            parens += 1
-        elif c == ")":
-            parens -= 1
-        if parens < 0:
-            return False, "Unmatched closing parenthesis"
-
-    if parens > 0:
-        return False, "Unclosed parenthesis"
-
-    # Basic function name validation
-    func_pattern = r"([A-Z]+)\("
-    funcs = re.findall(func_pattern, formula)
-    unsafe_funcs = {"INDIRECT", "HYPERLINK", "WEBSERVICE", "DGET", "RTD"}
-
-    for func in funcs:
-        if func in unsafe_funcs:
-            return False, f"Unsafe function: {func}"
-
-    return True, "Formula is valid"
-
-
 def validate_range_bounds(
     worksheet: Worksheet,
     start_row: int,
@@ -234,3 +204,31 @@ def validate_range_bounds(
         return True, "Range is valid"
     except Exception as e:
         return False, f"Invalid range: {e!s}"
+
+
+def read_worksheet_data_validation(filepath: str, sheet_name: str) -> str:
+    """Scan worksheet data-validation rules; return JSON or message string."""
+    wb = load_workbook(filepath, read_only=False)
+    try:
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found"
+
+        ws = wb[sheet_name]
+        validations = get_all_validation_ranges(ws)
+
+        if not validations:
+            return "No data validation rules found in this worksheet"
+
+        return json.dumps(
+            {
+                "sheet_name": sheet_name,
+                "validation_rules": validations,
+            },
+            indent=2,
+            default=str,
+        )
+    except Exception as e:
+        logger.error(f"Error getting validation info: {e}")
+        raise
+    finally:
+        wb.close()

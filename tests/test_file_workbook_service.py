@@ -13,8 +13,8 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.routing.file_workbook_service import FileWorkbookService  # noqa: E402
-from excel_mcp.routing.routed_dispatch import (  # noqa: E402
+from excel_mcp.fileio.service import FileWorkbookService  # noqa: E402
+from excel_mcp.value_mode import (  # noqa: E402
     FILE_BACKEND_FORMULA_NOT_EVALUATED_CODE,
     file_backend_formula_not_evaluated_warning,
 )
@@ -76,7 +76,7 @@ def test_read_range_with_metadata_xlsx_formula_no_warning(tmp_path) -> None:
     assert warnings == []
 
 
-@patch("excel_mcp.routing.file_workbook_service.read_excel_range_with_metadata")
+@patch("excel_mcp.fileio.service.read_excel_range_with_metadata")
 def test_read_range_with_metadata_json(mock_read: MagicMock) -> None:
     payload = {
         "range": "A1:A1",
@@ -100,7 +100,7 @@ def test_read_range_with_metadata_json(mock_read: MagicMock) -> None:
     assert out.startswith("{")
 
 
-@patch("excel_mcp.routing.file_workbook_service.read_excel_range_with_metadata")
+@patch("excel_mcp.fileio.service.read_excel_range_with_metadata")
 def test_read_range_with_metadata_empty(mock_read: MagicMock) -> None:
     mock_read.return_value = {"cells": []}
     svc = FileWorkbookService()
@@ -159,8 +159,8 @@ def test_read_range_with_metadata_default_echoes_value_mode(tmp_path) -> None:
     assert data["cells"][0]["value"] == 42
 
 
-@patch("excel_mcp.routing.file_workbook_service.get_all_validation_ranges")
-@patch("excel_mcp.routing.file_workbook_service.load_workbook")
+@patch("excel_mcp.fileio.validation.get_all_validation_ranges")
+@patch("excel_mcp.fileio.validation.load_workbook")
 def test_read_worksheet_data_validation_closes_workbook_on_get_all_failure(
     mock_load_workbook: MagicMock, mock_get_all: MagicMock
 ) -> None:
@@ -183,8 +183,8 @@ def test_read_worksheet_data_validation_closes_workbook_on_get_all_failure(
     wb.close.assert_called_once()
 
 
-@patch("excel_mcp.routing.file_workbook_service.get_all_validation_ranges")
-@patch("excel_mcp.routing.file_workbook_service.load_workbook")
+@patch("excel_mcp.fileio.validation.get_all_validation_ranges")
+@patch("excel_mcp.fileio.validation.load_workbook")
 def test_read_worksheet_data_validation(
     mock_load_workbook: MagicMock, mock_get_all: MagicMock
 ) -> None:
@@ -206,7 +206,7 @@ def test_read_worksheet_data_validation(
     assert data["validation_rules"] == mock_get_all.return_value
 
 
-@patch("excel_mcp.routing.file_workbook_service.validate_range_in_sheet_operation")
+@patch("excel_mcp.fileio.service.validate_range_in_sheet_operation")
 def test_validate_sheet_range(mock_validate: MagicMock) -> None:
     mock_validate.return_value = {"message": "Range 'A1' is valid. Sheet contains data in range 'A1:B2'"}
     svc = FileWorkbookService()
@@ -217,7 +217,7 @@ def test_validate_sheet_range(mock_validate: MagicMock) -> None:
     mock_validate.assert_called_with("/abs/f.xlsx", "Sh", "A1:B2")
 
 
-@patch("excel_mcp.routing.file_workbook_service.write_data")
+@patch("excel_mcp.fileio.service.write_data")
 def test_write_cell_grid(mock_write: MagicMock) -> None:
     mock_write.return_value = {"message": "Data written successfully to Sheet1"}
     svc = FileWorkbookService()
@@ -229,7 +229,7 @@ def test_write_cell_grid(mock_write: MagicMock) -> None:
     mock_write.assert_called_once_with("/abs/w.xlsx", "Sheet1", grid, "B2")
 
 
-@patch("excel_mcp.routing.file_workbook_service.wb_create_workbook")
+@patch("excel_mcp.fileio.service.wb_create_workbook")
 def test_create_workbook(mock_create: MagicMock) -> None:
     svc = FileWorkbookService()
     out = svc.create_workbook("/abs/new.xlsx")
@@ -237,7 +237,7 @@ def test_create_workbook(mock_create: MagicMock) -> None:
     assert out == "Created workbook at /abs/new.xlsx"
 
 
-@patch("excel_mcp.routing.file_workbook_service.load_workbook")
+@patch("excel_mcp.fileio.workbook.load_workbook")
 def test_save_workbook(mock_load_workbook: MagicMock) -> None:
     wb = MagicMock()
     mock_load_workbook.return_value = wb
@@ -249,8 +249,8 @@ def test_save_workbook(mock_load_workbook: MagicMock) -> None:
     assert out == "Workbook saved: /abs/existing.xlsx"
 
 
-def test_routing_package_exports_file_workbook_service() -> None:
-    from excel_mcp.routing import FileWorkbookService as FWS  # noqa: E402
+def test_fileio_package_exports_file_workbook_service() -> None:
+    from excel_mcp.fileio.service import FileWorkbookService as FWS  # noqa: E402
 
     assert FWS is FileWorkbookService
 

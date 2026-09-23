@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from excel_mcp.com_executor import ComThreadExecutor
+from excel_mcp.com.executor import ComThreadExecutor
 
 
 def test_submit_runs_callable_and_returns_result():

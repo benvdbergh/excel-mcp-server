@@ -82,6 +82,8 @@ class _AllRoutedOpsDummy:
         where: Optional[list[dict[str, Any]]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        omit_empty: bool = False,
+        search: Optional[str] = None,
         *,
         operation_metadata: Optional[dict[str, Any]] = None,
     ) -> str:
@@ -106,6 +108,8 @@ class _AllRoutedOpsDummy:
         where: Optional[list[dict[str, Any]]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        omit_empty: bool = False,
+        search: Optional[str] = None,
         *,
         operation_metadata: Optional[dict[str, Any]] = None,
     ) -> str:

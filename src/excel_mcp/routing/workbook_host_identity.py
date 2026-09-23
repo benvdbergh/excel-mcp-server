@@ -13,7 +13,7 @@ import os
 from typing import Any
 from urllib.parse import urljoin
 
-from excel_mcp.path_resolution import normalize_workbook_target_for_com
+from excel_mcp.path.resolution import normalize_workbook_target_for_com
 
 
 def _coerce_workbook_count(val: Any) -> int:

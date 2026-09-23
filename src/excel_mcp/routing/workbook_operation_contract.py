@@ -91,6 +91,8 @@ class WorkbookReadOperations(Protocol):
         where: Optional[list[dict[str, Any]]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        omit_empty: bool = False,
+        search: Optional[str] = None,
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:
@@ -117,6 +119,8 @@ class WorkbookReadOperations(Protocol):
         where: Optional[list[dict[str, Any]]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        omit_empty: bool = False,
+        search: Optional[str] = None,
         *,
         operation_metadata: Optional[Mapping[str, Any]] = None,
     ) -> str:

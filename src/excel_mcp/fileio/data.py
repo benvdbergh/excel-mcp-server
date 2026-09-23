@@ -9,16 +9,22 @@ from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 
-from excel_mcp.routing.routed_dispatch import file_backend_formula_not_evaluated_warning
-from excel_mcp.routing.read_value_mode import validate_metadata_mode
+from excel_mcp.query import (
+    DEFAULT_EXPORT_MAX_ROWS,
+    build_worksheet_table_payload,
+    export_read_end_row,
+    normalize_export_max_rows,
+)
+from excel_mcp.value_mode import (
+    file_backend_formula_not_evaluated_warning,
+    validate_metadata_mode,
+)
 
-from .exceptions import DataError
-from .cell_utils import parse_cell_range
-from .cell_validation import get_data_validation_for_cell
+from excel_mcp.exceptions import DataError
+from excel_mcp.cells import parse_cell_range
+from excel_mcp.fileio.cell_validation import get_data_validation_for_cell
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_EXPORT_MAX_ROWS = 10000
 
 
 def is_xlsm_workbook(filepath: Path | str) -> bool:
@@ -58,58 +64,6 @@ def _maybe_append_file_backend_formula_warning(
         return
     if worksheet_range_has_formulas(ws, start_row, start_col, end_row, end_col):
         file_backend_warnings.append(file_backend_formula_not_evaluated_warning())
-
-
-def _normalize_export_max_rows(max_rows: int | None) -> int:
-    if max_rows is None:
-        return DEFAULT_EXPORT_MAX_ROWS
-    if max_rows < 1:
-        raise DataError("max_rows must be a positive integer")
-    return max_rows
-
-
-def _export_read_end_row(start_row: int, end_row: int, cap: int) -> int:
-    """Last row to read when exporting: header row plus up to ``cap`` data rows."""
-    if end_row < start_row:
-        return start_row
-    total_data_rows = end_row - start_row
-    return start_row + min(total_data_rows, cap)
-
-
-def build_worksheet_table_payload(
-    sheet_name: str,
-    range_str: str,
-    matrix: List[List[Any]],
-    *,
-    max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
-    total_data_rows: int | None = None,
-) -> Dict[str, Any]:
-    """Build compact table JSON from a rectangular cell matrix (first row = headers)."""
-    cap = _normalize_export_max_rows(max_rows)
-    if not matrix:
-        total = 0 if total_data_rows is None else max(0, total_data_rows)
-        return {
-            "sheet_name": sheet_name,
-            "range": range_str,
-            "headers": [],
-            "rows": [],
-            "row_count": total,
-            "truncated": total > cap,
-            "max_rows": cap,
-        }
-    headers = list(matrix[0])
-    data_rows = [list(row) for row in matrix[1:]]
-    total = total_data_rows if total_data_rows is not None else len(data_rows)
-    truncated = total > cap
-    return {
-        "sheet_name": sheet_name,
-        "range": range_str,
-        "headers": headers,
-        "rows": data_rows[:cap],
-        "row_count": total,
-        "truncated": truncated,
-        "max_rows": cap,
-    }
 
 
 def _best_effort_number_format(value: int | float, fmt: str) -> str:
@@ -464,7 +418,7 @@ def export_excel_worksheet_table(
     max_rows: int = DEFAULT_EXPORT_MAX_ROWS,
 ) -> Dict[str, Any]:
     """Read worksheet range as a compact table (first row headers, rest data rows)."""
-    cap = _normalize_export_max_rows(max_rows)
+    cap = normalize_export_max_rows(max_rows)
     try:
         wb = load_workbook(filepath, read_only=False)
 
@@ -514,7 +468,7 @@ def export_excel_worksheet_table(
             f"{get_column_letter(start_col)}{start_row}:"
             f"{get_column_letter(end_col)}{end_row}"
         )
-        read_end_row = _export_read_end_row(start_row, end_row, cap)
+        read_end_row = export_read_end_row(start_row, end_row, cap)
         total_data_rows = max(0, end_row - start_row)
         matrix: List[List[Any]] = []
         for row in range(start_row, read_end_row + 1):

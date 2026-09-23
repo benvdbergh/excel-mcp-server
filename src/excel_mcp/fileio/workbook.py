@@ -5,7 +5,7 @@ from typing import Any
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
-from .exceptions import WorkbookError
+from excel_mcp.exceptions import WorkbookError
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +94,13 @@ def get_workbook_info(filepath: str, include_ranges: bool = False) -> dict[str, 
     except Exception as e:
         logger.error(f"Failed to get workbook info: {e}")
         raise WorkbookError(str(e))
+
+
+def save_workbook(filepath: str) -> str:
+    """Open, save, and close a workbook; return the success message string."""
+    wb = load_workbook(filepath)
+    try:
+        wb.save(filepath)
+    finally:
+        wb.close()
+    return f"Workbook saved: {filepath}"

@@ -1,20 +1,21 @@
 """COM-based detection of whether a workbook path is open in Excel (FR-2).
 
 Used by :class:`excel_mcp.routing.routing_backend.RoutingBackend` when the COM
-runtime is available. Enumeration runs on :class:`excel_mcp.com_executor.ComThreadExecutor`
+runtime is available. Enumeration runs on :class:`excel_mcp.com.executor.ComThreadExecutor`
 so pywin32 is never touched from arbitrary threads (FR-10).
 """
 
 from __future__ import annotations
 
-from excel_mcp.com_executor import ComThreadExecutor
-from excel_mcp.path_resolution import normalize_workbook_target_for_com
-from excel_mcp.routing.workbook_host_identity import count_workbook_collection_matches
+from excel_mcp.com.executor import ComThreadExecutor
+from excel_mcp.path.resolution import normalize_workbook_target_for_com
 
 
 def _count_workbook_matches_worker(resolved_path: str) -> int:
     """Return how many ``Application.Workbooks`` entries match ``resolved_path``."""
     import win32com.client  # lazy: COM thread only
+
+    from excel_mcp.routing.workbook_host_identity import count_workbook_collection_matches
 
     try:
         target = normalize_workbook_target_for_com(resolved_path)

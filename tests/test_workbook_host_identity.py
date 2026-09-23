@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from excel_mcp.path_resolution import normalize_workbook_target_for_com
+from excel_mcp.path.resolution import normalize_workbook_target_for_com
 from excel_mcp.routing.workbook_host_identity import (
     count_workbook_collection_matches,
     normalized_workbook_fullname,

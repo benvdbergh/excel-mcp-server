@@ -12,7 +12,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.validation import validate_range_bounds  # noqa: E402
+from excel_mcp.fileio.validation import validate_range_bounds  # noqa: E402
 
 
 def test_validate_range_bounds_uses_excel_limits() -> None:

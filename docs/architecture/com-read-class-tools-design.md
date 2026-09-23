@@ -12,7 +12,7 @@ This note records what it takes for **all read-class MCP tools** to execute agai
 
 ## 1. **Historical** pre–Epic-11 behavior vs **current** (ADR 0008) implementation
 
-The following subsections document the **old** state (read→file only, no `com_do_op`, COM read stubs) for **traceability**. **Current** `main` after **Epic 11** implements **COM-first** for `ToolKind.READ`, `com_do_op` on all read-class handlers, and **COM** implementations for the read contract methods in [`com_workbook_service.py`](../../src/excel_mcp/routing/com_workbook_service.py) (with `V1_FILE_FORCED` unchanged for chart/pivot per [ADR 0004](adr/0004-chart-pivot-com-parity-scope.md)).
+The following subsections document the **old** state (read→file only, no `com_do_op`, COM read stubs) for **traceability**. **Current** `main` after **Epic 11** implements **COM-first** for `ToolKind.READ`, `com_do_op` on all read-class handlers, and **COM** implementations for the read contract methods in [`com/service.py`](../../src/excel_mcp/com/service.py) (with `V1_FILE_FORCED` unchanged for chart/pivot per [ADR 0004](adr/0004-chart-pivot-com-parity-scope.md)).
 
 ### 1.1 (Historical) Routing: read-class always used the file backend
 
@@ -28,13 +28,13 @@ Previously, `read_class_file_backed` short-circuited `ToolKind.READ` to the file
 
 ### 1.4 (Historical) `ComWorkbookService` read methods were stubs
 
-**Current:** read methods run on the COM executor and return shapes aligned with the file façade (see implementation in `com_workbook_service.py`). `WorkbookOperationMetadata` / `com_read_opt_in` remain in the contract for forward use; default COM reads are **not** “opt-in only” (ADR 0008 supersedes that product gate).
+**Current:** read methods run on the COM executor and return shapes aligned with the file façade (see implementation in `com/service.py`). `WorkbookOperationMetadata` / `com_read_opt_in` remain in the contract for forward use; default COM reads are **not** “opt-in only” (ADR 0008 supersedes that product gate).
 
 ---
 
 ## 2. Read vs mutate (authoritative inventory)
 
-Source: [`tool_inventory.py`](../../src/excel_mcp/routing/tool_inventory.py) (single source of truth) and [`server.py`](../../src/excel_mcp/server.py) (tool registration).
+Source: [`tool_inventory.py`](../../src/excel_mcp/routing/tool_inventory.py) (single source of truth) and [`tools/`](../../src/excel_mcp/tools) registered from [`server.py`](../../src/excel_mcp/server.py).
 
 | `ToolKind` | MCP tools (handler function name) |
 |------------|-----------------------------------|
@@ -59,18 +59,18 @@ Source: [`tool_inventory.py`](../../src/excel_mcp/routing/tool_inventory.py) (si
 
 ## 4. What `ComWorkbookService` would need (mirror file contract)
 
-[`FileWorkbookService`](../../src/excel_mcp/routing/file_workbook_service.py) delegates reads to:
+[`FileWorkbookService`](../../src/excel_mcp/fileio/service.py) delegates reads to:
 
-- **`read_range_with_metadata`** → [`read_excel_range_with_metadata`](../../src/excel_mcp/data.py) → JSON with `range`, `sheet_name`, `cells[]` (`address`, `value`, `row`, `column`, optional `validation` per cell).
-- **`workbook_metadata`** → [`get_workbook_info`](../../src/excel_mcp/workbook.py).
-- **`read_merged_cell_ranges`** → [`get_merged_ranges`](../../src/excel_mcp/sheet.py).
-- **`read_worksheet_data_validation`** → openpyxl + [`get_all_validation_ranges`](../../src/excel_mcp/cell_validation.py).
-- **`validate_sheet_range`** → [`validate_range_in_sheet_operation`](../../src/excel_mcp/validation.py).
-- **`validate_formula_syntax`** → [`validate_formula_in_cell_operation`](../../src/excel_mcp/validation.py) (file path loads workbook).
+- **`read_range_with_metadata`** → [`read_excel_range_with_metadata`](../../src/excel_mcp/fileio/data.py) → JSON with `range`, `sheet_name`, `cells[]` (`address`, `value`, `row`, `column`, optional `validation` per cell).
+- **`workbook_metadata`** → [`get_workbook_info`](../../src/excel_mcp/fileio/workbook.py).
+- **`read_merged_cell_ranges`** → [`get_merged_ranges`](../../src/excel_mcp/fileio/sheet.py).
+- **`read_worksheet_data_validation`** → openpyxl + [`get_all_validation_ranges`](../../src/excel_mcp/fileio/cell_validation.py).
+- **`validate_sheet_range`** → [`validate_range_in_sheet_operation`](../../src/excel_mcp/fileio/validation.py).
+- **`validate_formula_syntax`** → [`validate_formula_in_cell_operation`](../../src/excel_mcp/fileio/validation.py) (file path loads workbook).
 
 For **COM parity**, each operation needs a **threaded COM implementation** (existing pattern: `self._executor.submit(...)` on the Excel STA thread per [ADR 0002](adr/0002-com-automation-stack.md)) that:
 
-1. **Resolves the workbook** using the same `_get_open_workbook_com` / `FullName` matching and errors as writes (not open, multiple match, Protected View, read-only where relevant)—see existing helpers in [`com_workbook_service.py`](../../src/excel_mcp/routing/com_workbook_service.py).
+1. **Resolves the workbook** using the same `_get_open_workbook_com` / `FullName` matching and errors as writes (not open, multiple match, Protected View, read-only where relevant)—see existing helpers in [`com/session.py`](../../src/excel_mcp/com/session.py).
 2. **`read_range_with_metadata`:** Build the same JSON shape as the file path. Default **`value_mode=value`** uses `Range.Value2` (calculated values). **`value_mode=text`** uses `Range.Text` on COM (display strings; shipped 0.5.0). Formula bar strings (`Formula` / `FormulaR1C1`) are **not** exposed yet — deferred. Per-cell **validation** via COM `Validation` API, mapped to the same schema consumers expect from openpyxl (`cell_validation` shape). **`metadata_mode=compact`** omits per-cell validation metadata (0.5.0). **`preview_only`** was removed in 0.5.0 (BEN-135).
 3. **`workbook_metadata`:** Enumerate sheets, names, and optional ranges via COM (`Workbook.Worksheets`, `UsedRange`, etc.) and align string/JSON shape with `get_workbook_info` output or document differences.
 4. **`read_merged_cell_ranges`:** `Range.MergeCells` / merged areas collection on the COM worksheet.

@@ -482,6 +482,8 @@ query_table(
     where: Optional[list[dict]] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
+    omit_empty: bool = False,
+    search: Optional[str] = None,
     workbook_transport: Optional[str] = None,
     include_routing_metadata: bool = False,
 ) -> str
@@ -490,8 +492,9 @@ query_table(
 - `filepath`: Workbook path or cloud locator (see **filepath** section at top of this file)
 - `table`: ListObject name (unique in the workbook; resolve by name, not sheet+range)
 - `columns`: Column names to return. **Required when the table has more than 32
-  columns**; at or under 32, omitting `columns` returns all columns. Prefer an
-  explicit short list on wide tables (for example a 120-column component register).
+  columns** (unless `omit_empty` is true, which allows omitting `columns` up to
+  **128** columns); at or under 32, omitting `columns` returns all columns. Prefer an
+  explicit short list on wide tables.
 - `where`: List of `{column, op, value}` clauses combined with AND. Operators:
   `eq`, `neq`, `contains` (case-insensitive substring), `in` (list value; OR
   within one column), `gt`, `gte`, `lt`, `lte`, `is_empty` (no `value`). Empty
@@ -499,6 +502,12 @@ query_table(
   a data row. Comparisons coerce to numbers when both sides parse as numbers.
 - `limit`: Max rows in this page (default **100**). Always marked not viewable.
 - `offset`: Matching rows to skip (default **0**). Always marked not viewable.
+- `omit_empty`: When `true`, after filtering/paging drop projected columns that
+  are empty (`None` or `""`) for every returned row (`0` and `false` are kept).
+  Default `false` preserves prior payloads. With `omit_empty`, omitting `columns`
+  is allowed on tables with up to **128** columns.
+- `search`: Optional case-insensitive substring; a row matches when any loaded
+  string cell contains it. Combined with `where` as AND. Default unset.
 - `workbook_transport`: Optional transport override (`auto` | `file` | `com`)
 - `include_routing_metadata`: When `true`, wrap the payload in the ADR 0010
   envelope (`result` / `_meta` / `warnings`); default `false` keeps legacy JSON.
@@ -558,6 +567,8 @@ query_region(
     where: Optional[list[dict]] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
+    omit_empty: bool = False,
+    search: Optional[str] = None,
     workbook_transport: Optional[str] = None,
     include_routing_metadata: bool = False,
 ) -> str
@@ -569,8 +580,9 @@ query_region(
   guess; otherwise pass an explicit `range` that includes a header row.
 - `range`: Explicit A1 range; first row is treated as the header (even when it is
   not worksheet row 1)
-- `columns` / `where` / `limit` / `offset`: Same semantics as `query_table`
-  (default limit **100**, width threshold **32**)
+- `columns` / `where` / `limit` / `offset` / `omit_empty` / `search`: Same
+  semantics as `query_table` (default limit **100**, width threshold **32**,
+  `omit_empty` up to **128**)
 - `workbook_transport`: Optional transport override (`auto` | `file` | `com`)
 - `include_routing_metadata`: When `true`, wrap the payload in the ADR 0010
   envelope; default `false` keeps legacy JSON

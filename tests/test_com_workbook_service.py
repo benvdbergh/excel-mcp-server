@@ -11,10 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from excel_mcp.routing.com_workbook_service import (
-    ComWorkbookService,
+from excel_mcp.com.read import (
+    _coerce_excel_cell_value,
+    _normalize_excel_matrix,
     _should_fallback_to_direct_read_com,
 )
+from excel_mcp.com.service import ComWorkbookService
 
 
 class ImmediateExecutor:
@@ -154,6 +156,56 @@ def test_should_fallback_stratified_sampling_large_sparse_matrix():
 
     ws.Cells = MagicMock(side_effect=_cell)
     assert _should_fallback_to_direct_read_com(ws, matrix, 1, 1, nrows, ncols) is True
+
+
+def test_should_fallback_entirely_blank_bulk_on_single_mismatch():
+    """Entirely blankish bulk matrix falls back after one direct non-blank."""
+    nrows, ncols = 8, 8  # <= _FALLBACK_LARGE_RANGE_CELLS → full row-major scan
+    matrix = [[None] * ncols for _ in range(nrows)]
+    ws = MagicMock()
+    ws.Cells = MagicMock(
+        side_effect=lambda r, c: MagicMock(Value2="x" if (r, c) == (1, 1) else None)
+    )
+    assert _should_fallback_to_direct_read_com(ws, matrix, 1, 1, nrows, ncols) is True
+
+
+def test_should_fallback_keeps_threshold_when_bulk_has_values():
+    """When bulk already has non-blanks, still require three mismatches."""
+    nrows, ncols = 10, 10
+    matrix = [[None] * ncols for _ in range(nrows)]
+    matrix[0][0] = "present"
+    ws = MagicMock()
+    # Only one blank-looking bulk cell disagrees with direct.
+    vals = {(1, 2): "only-one"}
+
+    def _cell(r, c):
+        m = MagicMock()
+        m.Value2 = vals.get((r, c))
+        return m
+
+    ws.Cells = MagicMock(side_effect=_cell)
+    assert _should_fallback_to_direct_read_com(ws, matrix, 1, 1, nrows, ncols) is False
+
+
+def test_coerce_excel_cell_value_sequences_and_strings():
+    class FakeSafeArray:
+        def __init__(self, items):
+            self._items = list(items)
+
+        def __len__(self):
+            return len(self._items)
+
+        def __iter__(self):
+            return iter(self._items)
+
+    assert _coerce_excel_cell_value(FakeSafeArray([0.0, 1.0])) == [0.0, 1.0]
+    assert _coerce_excel_cell_value((0.0, (1.0, 2.0))) == [0.0, [1.0, 2.0]]
+    assert _coerce_excel_cell_value("[0.0, 1.0]") == "[0.0, 1.0]"
+    assert _coerce_excel_cell_value(None) is None
+    matrix = _normalize_excel_matrix(((FakeSafeArray([0.0, 1.0]),),))
+    assert matrix == [[[0.0, 1.0]]]
+    dumped = json.dumps({"value": matrix[0][0]})
+    assert dumped == '{"value": [0.0, 1.0]}'
 
 
 def test_should_fallback_no_trigger_when_direct_also_blank():
@@ -600,7 +652,7 @@ def test_chart_and_pivot_remain_stubbed():
 
 def test_com_thread_executor_still_serializes_com_workbook_workers(book_path):
     """Regression: production uses ComThreadExecutor; ensure submit API works."""
-    from excel_mcp.com_executor import ComThreadExecutor
+    from excel_mcp.com.executor import ComThreadExecutor
 
     ws = MagicMock()
     start = MagicMock()

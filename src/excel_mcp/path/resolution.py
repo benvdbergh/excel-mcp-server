@@ -36,7 +36,7 @@ Interaction with ``get_excel_path`` (stdio vs SSE)
   When ``EXCEL_MCP_ALLOWED_PATHS`` is unset/empty, ``get_excel_path`` returns the
   canonical cloud locator for HTTPS targets without ``os.path.realpath``.
   When the path allowlist is active, https locators must satisfy
-  ``EXCEL_MCP_ALLOWED_URL_PREFIXES`` (see ``excel_mcp.path_policy``).
+  ``EXCEL_MCP_ALLOWED_URL_PREFIXES`` (see ``excel_mcp.path.policy``).
 * **SSE / HTTP jail** (``EXCEL_FILES_PATH`` set): cloud workbook URLs are not
   supported (``ValueError``); use local paths under the jail root.
 """

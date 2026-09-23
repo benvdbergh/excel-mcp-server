@@ -29,4 +29,4 @@ Operators may pass a **synced local path** while Excel’s COM identity is the *
 ## Links
 
 - FR-1 / path policy: Epic-2, `docs/architecture/target-architecture.md`
-- COM matching: `src/excel_mcp/routing/com_workbook_service.py`
+- COM matching: `src/excel_mcp/com/session.py`

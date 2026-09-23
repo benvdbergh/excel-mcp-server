@@ -55,7 +55,7 @@ Optional **`detail`** on **`excel_list_open_workbooks`**: **`minimal`** (default
 
 ## 4. SSE / HTTP jail (`EXCEL_FILES_PATH`)
 
-**Source of truth:** [`path_policy.py`](../../src/excel_mcp/path_policy.py) (FR-11).
+**Source of truth:** [`path/policy.py`](../../src/excel_mcp/path/policy.py) (FR-11).
 
 - **stdio** (jail unset): absolute paths and **allowed** HTTPS workbook strings (policy-dependent).
 - **SSE / streamable HTTP** (jail set): resolved workbook path must sit under **`realpath(EXCEL_FILES_PATH)`**; **cloud HTTPS** locators are **rejected** in current server behavior when the jail is active (see `server.py` path resolution layer).

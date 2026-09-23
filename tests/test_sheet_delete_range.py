@@ -12,7 +12,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.sheet import delete_range_operation  # noqa: E402
+from excel_mcp.fileio.sheet import delete_range_operation  # noqa: E402
 
 
 def test_shift_up_preserves_outside_columns(tmp_path) -> None:

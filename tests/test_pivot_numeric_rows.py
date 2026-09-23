@@ -12,7 +12,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.pivot import create_pivot_table  # noqa: E402
+from excel_mcp.fileio.pivot import create_pivot_table  # noqa: E402
 
 
 def test_numeric_row_field_sums(tmp_path) -> None:

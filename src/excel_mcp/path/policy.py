@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import os
 
-from excel_mcp.path_resolution import is_cloud_workbook_locator, parse_cloud_workbook_locator
+from excel_mcp.path.resolution import is_cloud_workbook_locator, parse_cloud_workbook_locator
 
 
 def resolved_path_is_within(base: str, candidate: str) -> bool:
@@ -182,7 +182,7 @@ def cloud_workbook_url_allowed_by_prefix_list(canonical_https_url: str) -> bool:
     """Return whether ``canonical_https_url`` matches at least one configured URL prefix.
 
     ``canonical_https_url`` must already be the output of
-    :func:`~excel_mcp.path_resolution.parse_cloud_workbook_locator`.
+    :func:`~excel_mcp.path.resolution.parse_cloud_workbook_locator`.
     """
     prefixes = _url_allowlist_prefixes_canonical()
     if prefixes is None:
@@ -199,7 +199,7 @@ def assert_cloud_workbook_url_allowlist(canonical_https_url: str) -> None:
     """When :func:`allowlist_enforced` is true, require URL prefix allowlist for https targets.
 
     Args:
-        canonical_https_url: Output of :func:`~excel_mcp.path_resolution.parse_cloud_workbook_locator`.
+        canonical_https_url: Output of :func:`~excel_mcp.path.resolution.parse_cloud_workbook_locator`.
 
     Raises:
         ValueError: No usable ``EXCEL_MCP_ALLOWED_URL_PREFIXES``, or URL not under an allowed prefix.

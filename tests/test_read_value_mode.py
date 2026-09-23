@@ -12,7 +12,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.routing.read_value_mode import validate_value_mode  # noqa: E402
+from excel_mcp.value_mode import validate_value_mode  # noqa: E402
 
 
 @pytest.mark.parametrize("mode", ["value", "text"])

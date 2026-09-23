@@ -13,11 +13,11 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from excel_mcp.routing.file_workbook_service import FileWorkbookService  # noqa: E402
-from excel_mcp.routing.read_value_mode import (  # noqa: E402
+from excel_mcp.fileio.service import FileWorkbookService  # noqa: E402
+from excel_mcp.value_mode import (  # noqa: E402
     validate_metadata_mode,
 )
-from excel_mcp.data import read_excel_range_with_metadata  # noqa: E402
+from excel_mcp.fileio.data import read_excel_range_with_metadata  # noqa: E402
 
 
 def _workbook_with_list_validation(tmp_path):
